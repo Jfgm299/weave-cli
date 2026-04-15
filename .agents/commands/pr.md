@@ -23,7 +23,7 @@ Create a Pull Request from the current branch into `develop`.
 
 **Steps:**
 1. Verify branch name matches the required pattern
-2. Run tests before creating the PR: `docker-compose exec api pytest` — if they fail, STOP and warn the user. Skip tests if changes are documentation-only.
+2. Run tests before creating the PR: `go test ./...` — if they fail, STOP and warn the user. Skip tests if changes are documentation-only.
 3. Push branch to remote: `git push -u origin HEAD`
 4. Draft the PR title and body using the template below. **Show the full draft to the user and STOP — wait for explicit confirmation before creating the PR.**
 5. Once confirmed, create the PR with `gh pr create --base develop`
@@ -72,8 +72,7 @@ Closes #
 
 ## 🧪 Test Plan
 
-- [ ] Tests pass locally: `docker-compose exec api pytest`
-- [ ] Module tests pass: `docker-compose exec api pytest app/modules/<mod>/tests -v`
+- [ ] Tests pass locally: `go test ./...`
 - [ ] Manually tested the affected functionality
 
 ---
