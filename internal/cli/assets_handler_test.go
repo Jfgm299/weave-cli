@@ -1,0 +1,146 @@
+package cli
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/Jfgm299/weave-cli/internal/app"
+	"github.com/Jfgm299/weave-cli/internal/config"
+	"github.com/Jfgm299/weave-cli/internal/fsops"
+)
+
+func TestAssetPathFor_BuildsSkillDestination(t *testing.T) {
+	t.Parallel()
+
+	got := assetPathFor(assetKindSkill, "/repo", "sdd-orchestrator")
+	if got != filepath.Join("/repo", ".agents", "skills", "sdd-orchestrator", "SKILL.md") {
+		t.Fatalf("unexpected skill destination: %s", got)
+	}
+}
+
+func TestAssetPathFor_BuildsCommandDestination(t *testing.T) {
+	t.Parallel()
+
+	got := assetPathFor(assetKindCommand, "/repo", "pr-review")
+	if got != filepath.Join("/repo", ".agents", "commands", "pr-review.md") {
+		t.Fatalf("unexpected command destination: %s", got)
+	}
+}
+
+func TestSourcePathFor_BuildsSkillSource(t *testing.T) {
+	t.Parallel()
+
+	got := sourcePathFor(assetKindSkill, "/src/skills", "sdd-orchestrator")
+	if got != filepath.Join("/src/skills", "sdd-orchestrator", "SKILL.md") {
+		t.Fatalf("unexpected skill source: %s", got)
+	}
+}
+
+func TestSourcePathFor_BuildsCommandSource(t *testing.T) {
+	t.Parallel()
+
+	got := sourcePathFor(assetKindCommand, "/src/commands", "pr-review")
+	if got != filepath.Join("/src/commands", "pr-review.md") {
+		t.Fatalf("unexpected command source: %s", got)
+	}
+}
+
+func TestAssetAddService_Add_CreatesSymlinkAndPersistsConfig(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	skillsRoot := filepath.Join(repo, "shared-skills")
+	skillDir := filepath.Join(skillsRoot, "sdd-orchestrator")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("mkdir skill source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# skill"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+
+	service := newAssetAddService(repo)
+	cfg := config.Default()
+	cfg.Sources.SkillsDir = skillsRoot
+	_, err := service.Add(context.Background(), assetKindSkill, "sdd-orchestrator", "", cfg)
+	if err != nil {
+		t.Fatalf("add skill: %v", err)
+	}
+
+	installed := filepath.Join(repo, ".agents", "skills", "sdd-orchestrator", "SKILL.md")
+	fi, err := os.Lstat(installed)
+	if err != nil {
+		t.Fatalf("lstat installed skill: %v", err)
+	}
+	if fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected installed skill to be symlink")
+	}
+
+	b, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if !containsString(string(b), "name: sdd-orchestrator") {
+		t.Fatalf("expected skill entry in weave.yaml, got: %s", string(b))
+	}
+}
+
+func TestAssetAddService_Add_StrictModeKeepsConfigUnchangedOnSymlinkFailure(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	seed := []byte("version: 1\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: ~/.weave/commands\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repo, ".agents"), []byte("blocked"), 0o644); err != nil {
+		t.Fatalf("seed blocking .agents file: %v", err)
+	}
+
+	service := newAssetAddService(repo)
+	cfg := config.Default()
+	_, err := service.Add(context.Background(), assetKindSkill, "missing-skill", "", cfg)
+	if err == nil {
+		t.Fatalf("expected add to fail for missing source")
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if string(after) != string(seed) {
+		t.Fatalf("expected config unchanged on symlink failure")
+	}
+}
+
+func containsString(s string, token string) bool {
+	return strings.Contains(s, token)
+}
+
+func newAssetAddService(workdir string) assetAddService {
+	validator := config.Validator{}
+	return assetAddService{
+		Service: app.ForgeService{
+			ProjectRootDetector: projectRootDetector{Workdir: workdir},
+			ConfigValidator:     validator,
+			Executor:            fsops.Engine{},
+			Writer:              config.AtomicFileWriter{Path: filepath.Join(workdir, "weave.yaml")},
+		},
+		Resolver: sourceResolver{
+			lookupEnv: func(_ string) (string, bool) { return "", false },
+			homeDir:   func() (string, error) { return workdir, nil },
+		},
+		Workdir: workdir,
+	}
+}

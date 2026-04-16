@@ -1,0 +1,285 @@
+//go:build e2e
+
+package e2e
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestForge_E2E_IdempotentAndNonDestructive(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	agentsDir := filepath.Join(repo, ".agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		t.Fatalf("mkdir .agents: %v", err)
+	}
+
+	agentsPath := filepath.Join(agentsDir, "AGENTS.md")
+	original := []byte("existing-agents-file")
+	if err := os.WriteFile(agentsPath, original, 0o644); err != nil {
+		t.Fatalf("write AGENTS.md: %v", err)
+	}
+
+	if out, err := runCLI(repo, root, nil, nil); err != nil {
+		t.Fatalf("first forge failed: %v\n%s", err, out)
+	}
+
+	weavePath := filepath.Join(repo, "weave.yaml")
+	b1, err := os.ReadFile(weavePath)
+	if err != nil {
+		t.Fatalf("read weave.yaml after first run: %v", err)
+	}
+
+	if out, err := runCLI(repo, root, nil, nil); err != nil {
+		t.Fatalf("second forge failed: %v\n%s", err, out)
+	}
+
+	b2, err := os.ReadFile(weavePath)
+	if err != nil {
+		t.Fatalf("read weave.yaml after second run: %v", err)
+	}
+
+	if string(b1) != string(b2) {
+		t.Fatalf("expected weave.yaml to remain deterministic across runs")
+	}
+
+	afterAgents, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read AGENTS.md after runs: %v", err)
+	}
+	if string(afterAgents) != string(original) {
+		t.Fatalf("expected existing AGENTS.md not overwritten")
+	}
+
+	for _, p := range []string{".agents/skills", ".agents/commands", ".agents/docs"} {
+		if _, err := os.Stat(filepath.Join(repo, p)); err != nil {
+			t.Fatalf("expected %s to exist: %v", p, err)
+		}
+	}
+}
+
+func TestForge_E2E_InvalidConfigModeFailsWithoutMutatingFilesystem(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	seed := []byte("version: 1\nsync:\n  mode: copy\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("seed weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, nil, nil)
+	if err == nil {
+		t.Fatalf("expected forge to fail for invalid sync mode")
+	}
+
+	if !strings.Contains(out, "sync.mode must be 'symlink' in v1") {
+		t.Fatalf("expected actionable mode validation error, got: %s", out)
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml to remain unchanged on invalid config")
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, ".agents/skills")); err == nil {
+		t.Fatalf("expected no mutation to .agents/skills on invalid config")
+	}
+}
+
+func TestSkillAdd_E2E_StrictFailureKeepsConfigUnchanged(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".agents"), []byte("blocked"), 0o644); err != nil {
+		t.Fatalf("seed blocking .agents file: %v", err)
+	}
+
+	seed := []byte("version: 1\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: ~/.weave/commands\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("seed weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"skill", "add", "does-not-exist"}, nil)
+	if err == nil {
+		t.Fatalf("expected skill add to fail")
+	}
+	if !strings.Contains(out, "not a directory") {
+		t.Fatalf("expected actionable fs error, got: %s", out)
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml unchanged on symlink failure")
+	}
+}
+
+func TestCommandAdd_E2E_StrictFailureKeepsConfigUnchanged(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".agents"), []byte("blocked"), 0o644); err != nil {
+		t.Fatalf("seed blocking .agents file: %v", err)
+	}
+
+	seed := []byte("version: 1\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: ~/.weave/commands\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("seed weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"command", "add", "does-not-exist"}, nil)
+	if err == nil {
+		t.Fatalf("expected command add to fail")
+	}
+	if !strings.Contains(out, "not a directory") {
+		t.Fatalf("expected actionable fs error, got: %s", out)
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml unchanged on symlink failure")
+	}
+}
+
+func TestAssetAdd_E2E_UsesSourcePrecedenceAndSymlinkOnly(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	cfgSkills := filepath.Join(repo, "cfg-skills")
+	envSkills := filepath.Join(repo, "env-skills")
+	flagSkills := filepath.Join(repo, "flag-skills")
+	cfgCommands := filepath.Join(repo, "cfg-commands")
+	envCommands := filepath.Join(repo, "env-commands")
+
+	for _, d := range []string{cfgSkills, envSkills, flagSkills, cfgCommands, envCommands} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", d, err)
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Join(flagSkills, "sdd-orchestrator"), 0o755); err != nil {
+		t.Fatalf("mkdir skill source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(flagSkills, "sdd-orchestrator", "SKILL.md"), []byte("# skill"), 0o644); err != nil {
+		t.Fatalf("write skill source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(envCommands, "pr-review.md"), []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	cfg := []byte("version: 1\nsources:\n  skills_dir: " + cfgSkills + "\n  commands_dir: " + cfgCommands + "\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), cfg, 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	env := []string{"WEAVE_SKILLS_DIR=" + envSkills, "WEAVE_COMMANDS_DIR=" + envCommands}
+
+	out, err := runCLI(repo, root, []string{"skill", "add", "sdd-orchestrator", "--from", flagSkills}, env)
+	if err != nil {
+		t.Fatalf("skill add failed: %v\n%s", err, out)
+	}
+
+	out, err = runCLI(repo, root, []string{"command", "add", "pr-review"}, env)
+	if err != nil {
+		t.Fatalf("command add failed: %v\n%s", err, out)
+	}
+
+	skillLink := filepath.Join(repo, ".agents", "skills", "sdd-orchestrator", "SKILL.md")
+	cmdLink := filepath.Join(repo, ".agents", "commands", "pr-review.md")
+
+	if fi, err := os.Lstat(skillLink); err != nil {
+		t.Fatalf("lstat skill link: %v", err)
+	} else if fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected skill install to be symlink")
+	}
+
+	if fi, err := os.Lstat(cmdLink); err != nil {
+		t.Fatalf("lstat command link: %v", err)
+	} else if fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected command install to be symlink")
+	}
+
+	conf, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	outCfg := string(conf)
+	if !strings.Contains(outCfg, filepath.ToSlash(filepath.Join(flagSkills, "sdd-orchestrator", "SKILL.md"))) {
+		t.Fatalf("expected skill source from --from flag, got: %s", outCfg)
+	}
+	if !strings.Contains(outCfg, filepath.ToSlash(filepath.Join(envCommands, "pr-review.md"))) {
+		t.Fatalf("expected command source from env override, got: %s", outCfg)
+	}
+}
+
+func runCLI(repo string, root string, args []string, extraEnv []string) (string, error) {
+	cmd := exec.Command("go", "run", "./cmd/weave")
+	if len(args) > 0 {
+		cmd = exec.Command("go", append([]string{"run", "./cmd/weave"}, args...)...)
+	}
+	cmd.Dir = root
+	baseEnv := append(os.Environ(), "WEAVE_WORKDIR="+repo)
+	cmd.Env = append(baseEnv, extraEnv...)
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
