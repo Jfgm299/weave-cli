@@ -29,6 +29,21 @@ Create a Pull Request from the current branch into `develop`.
 5. Once confirmed, create the PR with `gh pr create --base develop`
 6. Show the PR URL and STOP — wait for user confirmation before proceeding to merge
 
+### Safe command construction (zsh-safe)
+
+When creating the PR body, always use a HEREDOC and command substitution exactly like this pattern:
+
+```bash
+gh pr create --base develop --title "<title>" --body "$(cat <<'EOF'
+<markdown body>
+EOF
+)"
+```
+
+Never inline raw markdown directly in a quoted one-liner.
+Never execute chained PR-create + merge in a single command.
+Create PR first, then stop and wait for explicit user confirmation before merge.
+
 ---
 
 **PR title format:** `<type>(<scope>): <short imperative description>` — max 70 chars
