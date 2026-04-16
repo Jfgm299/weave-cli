@@ -149,6 +149,51 @@ func TestProviderService_AddProvider_UnsupportedProviderReturnsSupportedList(t *
 	}
 }
 
+func TestProviderService_AddProvider_CodexMissingBinaryReturnsActionableError(t *testing.T) {
+	t.Parallel()
+
+	executor := &providerExecutorSpy{}
+	writer := &providerWriterSpy{}
+
+	sut := ProviderService{
+		ProjectRootDetector: detectorStub{root: "/tmp/proj"},
+		ConfigValidator:     validatorStub{},
+		Executor:            executor,
+		Writer:              writer,
+		BinaryResolver:      providerBinaryResolverStub{},
+	}
+
+	registry := providerRegistryStub{adapters: map[string]ProviderAdapter{
+		"codex": providerAdapterStub{
+			name:             "codex",
+			requiredBinaries: []string{"codex"},
+			setupOps:         []fsops.Operation{{Type: fsops.OpCreateLink, Path: "/tmp/proj/.codex/AGENTS.md", Target: "../.agents/AGENTS.md"}},
+		},
+	}}
+
+	_, err := sut.AddProvider(context.Background(), config.Default(), registry, "codex")
+	if err == nil {
+		t.Fatalf("expected add provider to fail when codex binary is missing")
+	}
+
+	if !errors.Is(err, ErrMissingProviderBinaries) {
+		t.Fatalf("expected ErrMissingProviderBinaries, got %v", err)
+	}
+
+	msg := err.Error()
+	if !strings.Contains(msg, "codex") || !strings.Contains(msg, "Install the missing binaries") {
+		t.Fatalf("expected actionable missing binary message for codex, got %q", msg)
+	}
+
+	if executor.called {
+		t.Fatalf("expected fs executor not called when codex binary is missing")
+	}
+
+	if writer.called {
+		t.Fatalf("expected config writer not called when codex binary is missing")
+	}
+}
+
 func TestProviderService_AddProvider_DryRunDoesNotApplyOrPersist(t *testing.T) {
 	t.Parallel()
 
