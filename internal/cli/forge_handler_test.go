@@ -43,6 +43,22 @@ func TestForgeHandler_Run_ReturnsInvalidConfigExitCode(t *testing.T) {
 
 func TestProjectRootDetector_FailsWhenNoGitAncestorExists(t *testing.T) {
 	workdir := t.TempDir()
+	promptCalled := false
+	runGitInitCalled := false
+	t.Cleanup(func() {
+		isInteractiveSession = defaultIsInteractiveSession
+		promptGitInit = defaultPromptGitInit
+		runGitInit = defaultRunGitInit
+	})
+	isInteractiveSession = func() bool { return false }
+	promptGitInit = func(string) (bool, error) {
+		promptCalled = true
+		return false, nil
+	}
+	runGitInit = func(string) error {
+		runGitInitCalled = true
+		return nil
+	}
 	detector := projectRootDetector{Workdir: workdir}
 
 	_, err := detector.Detect(context.Background())
@@ -52,6 +68,111 @@ func TestProjectRootDetector_FailsWhenNoGitAncestorExists(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "project root not detected") {
 		t.Fatalf("expected actionable root detection error, got %q", err.Error())
+	}
+
+	if !strings.Contains(err.Error(), "Run `git init` and retry") {
+		t.Fatalf("expected git init guidance in error, got %q", err.Error())
+	}
+
+	if promptCalled {
+		t.Fatalf("promptGitInit should not be called in non-interactive mode")
+	}
+
+	if runGitInitCalled {
+		t.Fatalf("runGitInit should not be called in non-interactive mode")
+	}
+}
+
+func TestDefaultIsInteractiveSession_RespectsNonInteractiveEnvOverride(t *testing.T) {
+	t.Setenv("WEAVE_NON_INTERACTIVE", "1")
+
+	if defaultIsInteractiveSession() {
+		t.Fatalf("expected non-interactive override to force false")
+	}
+}
+
+func TestProjectRootDetector_InteractivePromptDeclinedFails(t *testing.T) {
+	workdir := t.TempDir()
+	promptCalled := false
+	t.Cleanup(func() {
+		isInteractiveSession = defaultIsInteractiveSession
+		promptGitInit = defaultPromptGitInit
+		runGitInit = defaultRunGitInit
+	})
+	isInteractiveSession = func() bool { return true }
+	promptGitInit = func(string) (bool, error) {
+		promptCalled = true
+		return false, nil
+	}
+	runGitInit = func(string) error {
+		t.Fatalf("runGitInit should not be called when prompt is declined")
+		return nil
+	}
+
+	detector := projectRootDetector{Workdir: workdir}
+	_, err := detector.Detect(context.Background())
+	if err == nil {
+		t.Fatalf("expected detect to fail when git init is declined")
+	}
+
+	if !strings.Contains(err.Error(), "initialization was declined") {
+		t.Fatalf("expected declined message, got %q", err.Error())
+	}
+
+	if !promptCalled {
+		t.Fatalf("expected interactive flow to call promptGitInit")
+	}
+}
+
+func TestProjectRootDetector_InteractivePromptAcceptedRunsGitInit(t *testing.T) {
+	workdir := t.TempDir()
+	t.Cleanup(func() {
+		isInteractiveSession = defaultIsInteractiveSession
+		promptGitInit = defaultPromptGitInit
+		runGitInit = defaultRunGitInit
+	})
+	isInteractiveSession = func() bool { return true }
+	promptGitInit = func(string) (bool, error) { return true, nil }
+	runGitInit = func(dir string) error {
+		if dir != workdir {
+			t.Fatalf("expected git init dir %q, got %q", workdir, dir)
+		}
+		if err := os.Mkdir(filepath.Join(workdir, ".git"), 0o755); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	detector := projectRootDetector{Workdir: workdir}
+	root, err := detector.Detect(context.Background())
+	if err != nil {
+		t.Fatalf("expected detect to succeed after git init, got %v", err)
+	}
+
+	if root != workdir {
+		t.Fatalf("expected root %q, got %q", workdir, root)
+	}
+}
+
+func TestProjectRootDetector_InteractivePromptAcceptedGitInitFails(t *testing.T) {
+	workdir := t.TempDir()
+	t.Cleanup(func() {
+		isInteractiveSession = defaultIsInteractiveSession
+		promptGitInit = defaultPromptGitInit
+		runGitInit = defaultRunGitInit
+	})
+	isInteractiveSession = func() bool { return true }
+	promptGitInit = func(string) (bool, error) { return true, nil }
+	runGitInit = func(string) error { return errors.New("git init failed") }
+
+	detector := projectRootDetector{Workdir: workdir}
+	_, err := detector.Detect(context.Background())
+	if err == nil {
+		t.Fatalf("expected detect to fail when git init fails")
+	}
+
+	if !strings.Contains(err.Error(), "failed to run `git init`") {
+		t.Fatalf("expected git init failure guidance, got %q", err.Error())
 	}
 }
 

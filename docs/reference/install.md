@@ -40,8 +40,8 @@ go run ./cmd/weave doctor
 
 - **`project root not detected` when running `weave forge`**
   - Current behavior requires a Git repository root (`.git`) to be present.
-  - Initialize a repository first: `git init`.
-  - Planned improvement: future versions may prompt automatically to create the repository when Git root is missing.
+  - In interactive mode, Weave prompts to run `git init` automatically.
+  - In non-interactive mode (CI/scripts), Weave fails fast with actionable guidance to run `git init`.
 
 - **Provider add fails with missing binary**
   - Install required provider binaries (`claude`, `opencode`).

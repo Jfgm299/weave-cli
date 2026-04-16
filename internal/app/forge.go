@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Jfgm299/weave-cli/internal/config"
 	"github.com/Jfgm299/weave-cli/internal/fsops"
@@ -57,7 +58,7 @@ type RunOptions struct {
 func (s ForgeService) RunWithOptions(ctx context.Context, cfg config.Config, opts RunOptions) (ForgeResult, error) {
 	root, err := s.ProjectRootDetector.Detect(ctx)
 	if err != nil {
-		return ForgeResult{}, ErrNotInProjectRoot
+		return ForgeResult{}, fmt.Errorf("%w: %v", ErrNotInProjectRoot, err)
 	}
 
 	if err := s.ConfigValidator.Validate(cfg); err != nil {

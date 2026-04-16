@@ -1,0 +1,16 @@
+name: migration-note-gate
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  enforce-migration-note:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enforce migration section for breaking changes
+        run: |
+          python3 scripts/release/check_migration_gate.py

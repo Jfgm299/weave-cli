@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/Jfgm299/weave-cli/internal/app"
 	"github.com/Jfgm299/weave-cli/internal/config"
@@ -59,6 +63,12 @@ type projectRootDetector struct {
 	Workdir string
 }
 
+var (
+	isInteractiveSession = defaultIsInteractiveSession
+	promptGitInit        = defaultPromptGitInit
+	runGitInit           = defaultRunGitInit
+)
+
 func (d projectRootDetector) Detect(_ context.Context) (string, error) {
 	workdir := d.Workdir
 	if workdir == "" {
@@ -66,9 +76,62 @@ func (d projectRootDetector) Detect(_ context.Context) (string, error) {
 	}
 	root, err := detectProjectRootFrom(workdir)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			if !isInteractiveSession() {
+				return "", fmt.Errorf("project root not detected: no git repository found. Run `git init` and retry")
+			}
+
+			confirmed, promptErr := promptGitInit(workdir)
+			if promptErr != nil {
+				return "", fmt.Errorf("project root not detected: failed to confirm git initialization: %w", promptErr)
+			}
+
+			if !confirmed {
+				return "", fmt.Errorf("project root not detected: no git repository found and initialization was declined")
+			}
+
+			if initErr := runGitInit(workdir); initErr != nil {
+				return "", fmt.Errorf("project root not detected: failed to run `git init`: %w", initErr)
+			}
+
+			return workdir, nil
+		}
 		return "", fmt.Errorf("project root not detected: %w", err)
 	}
 	return root, nil
+}
+
+func defaultIsInteractiveSession() bool {
+	if os.Getenv("WEAVE_NON_INTERACTIVE") == "1" {
+		return false
+	}
+	stdinInfo, stdinErr := os.Stdin.Stat()
+	stdoutInfo, stdoutErr := os.Stdout.Stat()
+	if stdinErr != nil || stdoutErr != nil {
+		return false
+	}
+	return (stdinInfo.Mode()&os.ModeCharDevice) != 0 && (stdoutInfo.Mode()&os.ModeCharDevice) != 0
+}
+
+func defaultPromptGitInit(workdir string) (bool, error) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("No git repository detected for %s. Initialize one now with `git init`? [y/N]: ", workdir)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	choice := strings.TrimSpace(strings.ToLower(line))
+	return choice == "y" || choice == "yes", nil
+}
+
+func defaultRunGitInit(workdir string) error {
+	cmd := exec.Command("git", "init")
+	cmd.Dir = workdir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 type forgePlanner struct {
