@@ -43,10 +43,11 @@ func TestDoctor_Integration_ConfigWriteFailureRollsBackSymlinkInStrictMode(t *te
 	}
 
 	_, err := svc.AddAsset(context.Background(), cfg, app.AddAssetInput{
-		Kind:        app.AssetKindSkill,
-		Name:        "sdd-orchestrator",
-		SourcePath:  source,
-		ProjectPath: installed,
+		Kind:           app.AssetKindSkill,
+		Name:           "sdd-orchestrator",
+		SourcePath:     source,
+		ProjectPath:    installed,
+		ConflictPolicy: app.ConflictPolicyOverwrite,
 	})
 	if err == nil {
 		t.Fatalf("expected add asset to fail when config write rename fails")

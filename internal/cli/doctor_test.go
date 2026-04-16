@@ -145,6 +145,47 @@ func TestRunDoctor_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestRunDoctor_StaleProviderIntegrationIsReported(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	configBody := "version: 1\n" +
+		"providers:\n" +
+		"  - name: claude-code\n" +
+		"    enabled: true\n" +
+		"sources:\n" +
+		"  skills_dir: ~/.weave/skills\n" +
+		"  commands_dir: ~/.weave/commands\n" +
+		"sync:\n" +
+		"  mode: symlink\n" +
+		"skills: []\n" +
+		"commands: []\n"
+
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), []byte(configBody), 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	t.Setenv("WEAVE_WORKDIR", repo)
+	out := captureStdout(t, func() {
+		code, err := runDoctor(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("unexpected runDoctor error: %v", err)
+		}
+		if code != ExitDoctorIssues {
+			t.Fatalf("expected ExitDoctorIssues for stale provider integration, got %d", code)
+		}
+	})
+
+	if !strings.Contains(out, "stale_provider_integration") {
+		t.Fatalf("expected stale provider issue in doctor output, got: %s", out)
+	}
+	if !strings.Contains(out, "weave provider repair claude-code") {
+		t.Fatalf("expected provider repair guidance, got: %s", out)
+	}
+}
+
 func TestRunDoctor_RejectsUnknownFlagDeterministically(t *testing.T) {
 	repo := t.TempDir()
 	t.Setenv("WEAVE_WORKDIR", repo)

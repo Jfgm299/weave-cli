@@ -20,10 +20,16 @@ type Sources struct {
 }
 
 type Sync struct {
-	Mode string `yaml:"mode"`
+	Mode           string `yaml:"mode"`
+	ConflictPolicy string `yaml:"conflict_policy,omitempty"`
 }
 
 type Asset struct {
-	Name   string `yaml:"name"`
-	Source string `yaml:"source"`
+	Name   string         `yaml:"name"`
+	Source string         `yaml:"source"`
+	Meta   *CommandMetaV1 `yaml:"metadata,omitempty"`
+}
+
+type CommandMetaV1 struct {
+	ProviderCompat []string `yaml:"provider_compat,omitempty"`
 }

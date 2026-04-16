@@ -16,18 +16,27 @@ const (
 )
 
 type AddAssetInput struct {
-	Kind        AssetKind
-	Name        string
-	SourcePath  string
-	ProjectPath string
+	Kind           AssetKind
+	Name           string
+	SourcePath     string
+	ProjectPath    string
+	ConflictPolicy ConflictPolicy
+	CommandMeta    *config.CommandMetaV1
 }
 
 type AddAssetResult struct {
-	Root        string
-	ConfigSaved bool
-	OpsPlanned  int
-	OpsApplied  int
-	DryRun      bool
+	Root             string
+	ConfigSaved      bool
+	OpsPlanned       int
+	OpsApplied       int
+	DryRun           bool
+	ConflictDetected bool
+	ConflictAction   string
+	BackupPath       string
+}
+
+type ExistingPathChecker interface {
+	Exists(path string) (bool, error)
 }
 
 func (s ForgeService) AddAsset(ctx context.Context, cfg config.Config, input AddAssetInput) (AddAssetResult, error) {
@@ -44,33 +53,77 @@ func (s ForgeService) AddAssetWithOptions(ctx context.Context, cfg config.Config
 		return AddAssetResult{}, WrapInvalidConfig(err)
 	}
 
-	op := fsops.Operation{
-		Type:   fsops.OpCreateLink,
-		Path:   input.ProjectPath,
-		Target: input.SourcePath,
+	checker := s.PathChecker
+	if checker == nil {
+		checker = defaultPathChecker{}
 	}
 
-	if err := ensureOpsWithinRoot(root, []fsops.Operation{op}); err != nil {
+	conflict, err := checker.Exists(input.ProjectPath)
+	if err != nil {
 		return AddAssetResult{}, err
 	}
 
-	result := AddAssetResult{Root: root, OpsPlanned: 1, DryRun: opts.DryRun}
+	policy := input.ConflictPolicy
+	if conflict {
+		if resolved, err := resolveConflictPolicy(ctx, policy, s.ConflictPrompter, ConflictPromptInput{
+			Kind: classifyAssetKind(input.Kind),
+			Name: input.Name,
+			Path: input.ProjectPath,
+		}); err != nil {
+			return AddAssetResult{}, err
+		} else {
+			policy = resolved
+		}
+	}
+
+	var (
+		ops     []fsops.Operation
+		skipped bool
+	)
+	if conflict {
+		planner := conflictPlanner{}
+		ops, skipped, err = planner.plan(input.ProjectPath, input.SourcePath, policy)
+		if err != nil {
+			return AddAssetResult{}, err
+		}
+	} else {
+		ops = []fsops.Operation{{
+			Type:   fsops.OpCreateLink,
+			Path:   input.ProjectPath,
+			Target: input.SourcePath,
+		}}
+	}
+
+	if err := ensureOpsWithinRoot(root, ops); err != nil {
+		return AddAssetResult{}, err
+	}
+
+	result := AddAssetResult{Root: root, OpsPlanned: len(ops), DryRun: opts.DryRun, ConflictDetected: conflict, ConflictAction: string(policy)}
+	if skipped {
+		result.ConflictAction = string(ConflictPolicySkip)
+		return result, nil
+	}
+	for _, op := range ops {
+		if op.Type == fsops.OpBackupPath {
+			result.BackupPath = op.Target
+		}
+	}
 
 	if opts.DryRun {
 		return result, nil
 	}
 
-	if err := s.Executor.Apply(ctx, []fsops.Operation{op}); err != nil {
+	if err := s.Executor.Apply(ctx, ops); err != nil {
 		return AddAssetResult{}, err
 	}
-	result.OpsApplied = 1
+	result.OpsApplied = len(ops)
 
 	nextCfg := cfg
 	switch input.Kind {
 	case AssetKindSkill:
 		nextCfg.Skills = upsertAsset(nextCfg.Skills, config.Asset{Name: input.Name, Source: input.SourcePath})
 	case AssetKindCommand:
-		nextCfg.Commands = upsertAsset(nextCfg.Commands, config.Asset{Name: input.Name, Source: input.SourcePath})
+		nextCfg.Commands = upsertAsset(nextCfg.Commands, config.Asset{Name: input.Name, Source: input.SourcePath, Meta: input.CommandMeta})
 	}
 
 	if err := s.Writer.Write(nextCfg); err != nil {

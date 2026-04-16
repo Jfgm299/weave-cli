@@ -59,6 +59,9 @@ func MarshalDeterministic(cfg Config) ([]byte, error) {
 		return nil, err
 	}
 
+	normalizeAssetMetadata(copyCfg.Commands)
+	normalizeAssetMetadata(copyCfg.Skills)
+
 	if err := validateUniqueProviders(copyCfg.Providers); err != nil {
 		return nil, err
 	}
@@ -91,4 +94,38 @@ func validateUniqueNames(assets []Asset, field string) error {
 		seen[asset.Name] = struct{}{}
 	}
 	return nil
+}
+
+func normalizeAssetMetadata(assets []Asset) {
+	for i := range assets {
+		if assets[i].Meta == nil {
+			continue
+		}
+		if len(assets[i].Meta.ProviderCompat) == 0 {
+			assets[i].Meta = nil
+			continue
+		}
+		sorted := append([]string(nil), assets[i].Meta.ProviderCompat...)
+		sort.Strings(sorted)
+		assets[i].Meta.ProviderCompat = uniqueNonEmpty(sorted)
+		if len(assets[i].Meta.ProviderCompat) == 0 {
+			assets[i].Meta = nil
+		}
+	}
+}
+
+func uniqueNonEmpty(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }

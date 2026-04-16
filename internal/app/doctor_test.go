@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Jfgm299/weave-cli/internal/config"
+	"github.com/Jfgm299/weave-cli/internal/fsops"
 )
 
 func TestDoctorService_Run_HealthyProjectReturnsNoIssues(t *testing.T) {
@@ -90,4 +91,69 @@ func TestDoctorService_Run_MissingSkillSymlinkReturnsRepairGuidance(t *testing.T
 	if len(result.RepairCommands) == 0 || !strings.Contains(result.RepairCommands[0], "weave skill add sdd-orchestrator") {
 		t.Fatalf("expected repair guidance for missing skill symlink, got %+v", result.RepairCommands)
 	}
+}
+
+func TestDoctorService_Run_UnknownEnabledProviderFlagsStaleIntegration(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+
+	svc := DoctorService{ProviderRegistry: doctorRegistryStub{}}
+	result, err := svc.Run(context.Background(), repo, config.Config{
+		Version:   1,
+		Sync:      config.Sync{Mode: "symlink"},
+		Providers: []config.Provider{{Name: "future-provider", Enabled: true}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.Status != DoctorStatusIssuesFound {
+		t.Fatalf("expected issues status, got %q", result.Status)
+	}
+
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Code == "unknown_enabled_provider" {
+			found = true
+			if !strings.Contains(issue.RepairCommand, "upgrade weave") {
+				t.Fatalf("expected upgrade/repair guidance, got %q", issue.RepairCommand)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected unknown_enabled_provider issue, got %+v", result.Issues)
+	}
+}
+
+type doctorRegistryStub struct{}
+
+func (doctorRegistryStub) Get(name string) (ProviderAdapter, bool) {
+	if name == "claude-code" {
+		return doctorAdapterStub{name: "claude-code"}, true
+	}
+	return nil, false
+}
+
+func (doctorRegistryStub) SupportedNames() []string {
+	return []string{"claude-code"}
+}
+
+type doctorAdapterStub struct{ name string }
+
+func (a doctorAdapterStub) Name() string { return a.name }
+
+func (doctorAdapterStub) RequiredBinaries() []string { return nil }
+
+func (doctorAdapterStub) PlanSetup(projectRoot string) ([]fsops.Operation, error) {
+	return []fsops.Operation{{Type: fsops.OpCreateLink, Path: filepath.Join(projectRoot, ".claude", "CLAUDE.md"), Target: filepath.Join("..", ".agents", "AGENTS.md")}}, nil
+}
+
+func (doctorAdapterStub) PlanRepair(projectRoot string) ([]fsops.Operation, error) {
+	return doctorAdapterStub{}.PlanSetup(projectRoot)
+}
+
+func (doctorAdapterStub) PlanRemove(projectRoot string) ([]fsops.Operation, error) {
+	return []fsops.Operation{{Type: fsops.OpRemovePath, Path: filepath.Join(projectRoot, ".claude")}}, nil
 }

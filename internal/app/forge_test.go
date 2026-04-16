@@ -377,6 +377,99 @@ func TestForgeService_AddAsset_UsesCreateLinkForSkillAndCommand(t *testing.T) {
 	})
 }
 
+func TestForgeService_AddAsset_ConflictPromptRequiredWhenNoPrompter(t *testing.T) {
+	t.Parallel()
+
+	sut := ForgeService{
+		ProjectRootDetector: detectorStub{root: "/tmp/proj"},
+		ConfigValidator:     validatorStub{},
+		Executor:            &executorSpy{},
+		Writer:              &writerSpy{},
+		PathChecker:         pathCheckerStub{exists: true},
+	}
+
+	_, err := sut.AddAsset(context.Background(), config.Default(), AddAssetInput{
+		Kind:        AssetKindSkill,
+		Name:        "sdd-orchestrator",
+		SourcePath:  "/tmp/proj/src/skills/sdd-orchestrator/SKILL.md",
+		ProjectPath: "/tmp/proj/.agents/skills/sdd-orchestrator/SKILL.md",
+	})
+	if err == nil {
+		t.Fatalf("expected prompt-required conflict error")
+	}
+	if !errors.Is(err, ErrConflictPromptRequired) {
+		t.Fatalf("expected ErrConflictPromptRequired, got %v", err)
+	}
+}
+
+func TestForgeService_AddAsset_ConflictBackupPolicyPlansBackupAndCreateLink(t *testing.T) {
+	t.Parallel()
+
+	executor := &executorSpy{}
+	writer := &writerSpy{}
+
+	sut := ForgeService{
+		ProjectRootDetector: detectorStub{root: "/tmp/proj"},
+		ConfigValidator:     validatorStub{},
+		Executor:            executor,
+		Writer:              writer,
+		PathChecker:         pathCheckerStub{exists: true},
+	}
+
+	_, err := sut.AddAsset(context.Background(), config.Default(), AddAssetInput{
+		Kind:           AssetKindSkill,
+		Name:           "sdd-orchestrator",
+		SourcePath:     "/tmp/proj/src/skills/sdd-orchestrator/SKILL.md",
+		ProjectPath:    "/tmp/proj/.agents/skills/sdd-orchestrator/SKILL.md",
+		ConflictPolicy: ConflictPolicyBackup,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(executor.lastOps) != 2 {
+		t.Fatalf("expected backup + create link ops, got %+v", executor.lastOps)
+	}
+	if executor.lastOps[0].Type != fsops.OpBackupPath || executor.lastOps[1].Type != fsops.OpCreateLink {
+		t.Fatalf("unexpected conflict operation order: %+v", executor.lastOps)
+	}
+}
+
+func TestForgeService_AddAsset_ConflictSkipPolicyReturnsWithoutWrites(t *testing.T) {
+	t.Parallel()
+
+	executor := &executorSpy{}
+	writer := &writerSpy{}
+
+	sut := ForgeService{
+		ProjectRootDetector: detectorStub{root: "/tmp/proj"},
+		ConfigValidator:     validatorStub{},
+		Executor:            executor,
+		Writer:              writer,
+		PathChecker:         pathCheckerStub{exists: true},
+	}
+
+	result, err := sut.AddAsset(context.Background(), config.Default(), AddAssetInput{
+		Kind:           AssetKindSkill,
+		Name:           "sdd-orchestrator",
+		SourcePath:     "/tmp/proj/src/skills/sdd-orchestrator/SKILL.md",
+		ProjectPath:    "/tmp/proj/.agents/skills/sdd-orchestrator/SKILL.md",
+		ConflictPolicy: ConflictPolicySkip,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.OpsPlanned != 0 || result.OpsApplied != 0 {
+		t.Fatalf("expected no operations for skip policy, got %+v", result)
+	}
+	if executor.called {
+		t.Fatalf("executor should not run for skip policy")
+	}
+	if writer.called {
+		t.Fatalf("writer should not run for skip policy")
+	}
+}
+
 type detectorStub struct {
 	root string
 	err  error
@@ -423,6 +516,18 @@ func (e *executorSpy) Apply(_ context.Context, ops []fsops.Operation) error {
 type writerSpy struct {
 	called bool
 	err    error
+}
+
+type pathCheckerStub struct {
+	exists bool
+	err    error
+}
+
+func (p pathCheckerStub) Exists(_ string) (bool, error) {
+	if p.err != nil {
+		return false, p.err
+	}
+	return p.exists, nil
 }
 
 func (w *writerSpy) Write(_ config.Config) error {
