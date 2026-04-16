@@ -8,6 +8,7 @@ import (
 	"sort"
 
 	"github.com/Jfgm299/weave-cli/internal/config"
+	"github.com/Jfgm299/weave-cli/internal/fsops"
 )
 
 type DoctorStatus string
@@ -31,9 +32,15 @@ type DoctorResult struct {
 	RepairCommands []string      `json:"repair_commands"`
 }
 
-type DoctorService struct{}
+type DoctorService struct {
+	ProviderRegistry ProviderRegistry
+}
 
-func (DoctorService) Run(_ context.Context, projectRoot string, cfg config.Config) (DoctorResult, error) {
+func (d DoctorService) Run(_ context.Context, projectRoot string, cfg config.Config) (DoctorResult, error) {
+	return d.run(projectRoot, cfg)
+}
+
+func (d DoctorService) run(projectRoot string, cfg config.Config) (DoctorResult, error) {
 	issues := make([]DoctorIssue, 0)
 
 	if err := (config.Validator{}).Validate(cfg); err != nil {
@@ -48,6 +55,7 @@ func (DoctorService) Run(_ context.Context, projectRoot string, cfg config.Confi
 
 	issues = append(issues, diagnoseAssets(projectRoot, cfg.Skills, true)...)
 	issues = append(issues, diagnoseAssets(projectRoot, cfg.Commands, false)...)
+	issues = append(issues, d.diagnoseProviderProjections(projectRoot, cfg)...)
 
 	repairs := uniqueSortedRepairCommands(issues)
 	if len(issues) == 0 {
@@ -55,6 +63,99 @@ func (DoctorService) Run(_ context.Context, projectRoot string, cfg config.Confi
 	}
 
 	return DoctorResult{Status: DoctorStatusIssuesFound, Issues: issues, RepairCommands: repairs}, nil
+}
+
+func (d DoctorService) diagnoseProviderProjections(projectRoot string, cfg config.Config) []DoctorIssue {
+	if d.ProviderRegistry == nil {
+		return nil
+	}
+
+	enabled := ListEnabledProviders(cfg)
+	issues := make([]DoctorIssue, 0)
+	for _, provider := range enabled {
+		adapter, ok := d.ProviderRegistry.Get(provider.Name)
+		if !ok {
+			issues = append(issues, DoctorIssue{
+				Code:          "unknown_enabled_provider",
+				Summary:       fmt.Sprintf("enabled provider %q is not supported by this weave binary", provider.Name),
+				RepairCommand: fmt.Sprintf("Remove %q from weave.yaml or upgrade weave and run `weave provider repair %s`", provider.Name, provider.Name),
+				DocsPath:      DocsPathProviders,
+				DocsURL:       DocsURL(DocsPathProviders),
+			})
+			continue
+		}
+
+		opts, err := adapter.PlanSetup(projectRoot)
+		if err != nil {
+			issues = append(issues, DoctorIssue{
+				Code:          "stale_provider_integration",
+				Summary:       fmt.Sprintf("cannot evaluate provider %q projection health: %v", provider.Name, err),
+				RepairCommand: fmt.Sprintf("weave provider repair %s", provider.Name),
+				DocsPath:      DocsPathProviders,
+				DocsURL:       DocsURL(DocsPathProviders),
+			})
+			continue
+		}
+
+		for _, op := range opts {
+			if op.Type != fsops.OpCreateLink {
+				continue
+			}
+			fi, err := os.Lstat(op.Path)
+			if os.IsNotExist(err) {
+				issues = append(issues, DoctorIssue{
+					Code:          "stale_provider_integration",
+					Summary:       fmt.Sprintf("provider %q projection is stale: missing %s", provider.Name, op.Path),
+					RepairCommand: fmt.Sprintf("weave provider repair %s", provider.Name),
+					DocsPath:      DocsPathProviders,
+					DocsURL:       DocsURL(DocsPathProviders),
+				})
+				continue
+			}
+			if err != nil {
+				issues = append(issues, DoctorIssue{
+					Code:          "stale_provider_integration",
+					Summary:       fmt.Sprintf("provider %q projection is unreadable at %s: %v", provider.Name, op.Path, err),
+					RepairCommand: fmt.Sprintf("weave provider repair %s", provider.Name),
+					DocsPath:      DocsPathProviders,
+					DocsURL:       DocsURL(DocsPathProviders),
+				})
+				continue
+			}
+			if fi.Mode()&os.ModeSymlink == 0 {
+				issues = append(issues, DoctorIssue{
+					Code:          "stale_provider_integration",
+					Summary:       fmt.Sprintf("provider %q projection at %s is not a symlink", provider.Name, op.Path),
+					RepairCommand: fmt.Sprintf("weave provider repair %s", provider.Name),
+					DocsPath:      DocsPathProviders,
+					DocsURL:       DocsURL(DocsPathProviders),
+				})
+				continue
+			}
+			target, err := os.Readlink(op.Path)
+			if err != nil {
+				issues = append(issues, DoctorIssue{
+					Code:          "stale_provider_integration",
+					Summary:       fmt.Sprintf("provider %q projection link is unreadable at %s: %v", provider.Name, op.Path, err),
+					RepairCommand: fmt.Sprintf("weave provider repair %s", provider.Name),
+					DocsPath:      DocsPathProviders,
+					DocsURL:       DocsURL(DocsPathProviders),
+				})
+				continue
+			}
+			if filepath.Clean(target) != filepath.Clean(op.Target) {
+				issues = append(issues, DoctorIssue{
+					Code:          "stale_provider_integration",
+					Summary:       fmt.Sprintf("provider %q projection at %s points to %s but expected %s", provider.Name, op.Path, target, op.Target),
+					RepairCommand: fmt.Sprintf("weave provider repair %s", provider.Name),
+					DocsPath:      DocsPathProviders,
+					DocsURL:       DocsURL(DocsPathProviders),
+				})
+			}
+		}
+	}
+
+	return issues
 }
 
 func diagnoseAssets(projectRoot string, assets []config.Asset, skills bool) []DoctorIssue {

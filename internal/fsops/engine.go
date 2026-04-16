@@ -36,6 +36,22 @@ func (Engine) Apply(_ context.Context, ops []Operation) error {
 			if err := os.RemoveAll(op.Path); err != nil {
 				return err
 			}
+		case OpBackupPath:
+			if _, err := os.Lstat(op.Path); err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
+				return err
+			}
+			if err := os.MkdirAll(filepath.Dir(op.Target), 0o755); err != nil {
+				return err
+			}
+			if err := os.RemoveAll(op.Target); err != nil {
+				return err
+			}
+			if err := os.Rename(op.Path, op.Target); err != nil {
+				return err
+			}
 		}
 	}
 

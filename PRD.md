@@ -550,6 +550,14 @@ A critical requirement is Done only when all conditions are met:
 
 The PRD defines the mandatory verification contract; detailed test case expansion is maintained in SDD specs/tasks to keep the PRD focused and maintainable.
 
+### 13.6 Completion Semantics (mandatory)
+
+To avoid mixed definitions of completion:
+
+- A requirement can be marked **done** only when it is fully implemented and operationally validated according to this verification strategy.
+- Docs/policy baseline acceptance is allowed in v1 for scoped cuts, but it MUST be tracked as deferred executable work and MUST NOT be represented as fully done.
+- If execution layers are intentionally postponed (for example, release automation or CI enforcement), they MUST be logged in OpenSpec deferred tracking with owner, closure criteria, and target milestone.
+
 ---
 
 ## 14. Future Considerations (Out of Scope for v1)

@@ -13,6 +13,8 @@ type ForgeService struct {
 	Planner             ForgePlanner
 	Executor            OperationExecutor
 	Writer              ConfigWriter
+	PathChecker         ExistingPathChecker
+	ConflictPrompter    ConflictPrompter
 }
 
 type ProjectRootDetector interface {

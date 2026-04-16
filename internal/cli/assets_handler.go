@@ -1,9 +1,12 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Jfgm299/weave-cli/internal/app"
 	"github.com/Jfgm299/weave-cli/internal/config"
@@ -16,7 +19,27 @@ type assetAddService struct {
 	Workdir  string
 }
 
-func (s assetAddService) Add(ctx context.Context, kind assetKind, name string, fromFlag string, dryRun bool, cfg config.Config) (app.AddAssetResult, error) {
+type stdinConflictPrompter struct {
+	in *bufio.Reader
+}
+
+func (p stdinConflictPrompter) ResolveConflict(_ context.Context, input app.ConflictPromptInput) (app.ConflictPolicy, error) {
+	reader := p.in
+	if reader == nil {
+		reader = bufio.NewReader(os.Stdin)
+	}
+
+	fmt.Printf("Conflict detected for %s %q at %s. Choose action [overwrite/skip/backup]: ", input.Kind, input.Name, input.Path)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+
+	choice := strings.TrimSpace(strings.ToLower(line))
+	return app.ConflictPolicy(choice), nil
+}
+
+func (s assetAddService) Add(ctx context.Context, kind assetKind, name string, fromFlag string, dryRun bool, conflictPolicy app.ConflictPolicy, cfg config.Config) (app.AddAssetResult, error) {
 	root := s.Workdir
 	if root == "" {
 		root = resolveWorkdir()
@@ -28,10 +51,14 @@ func (s assetAddService) Add(ctx context.Context, kind assetKind, name string, f
 	}
 
 	input := app.AddAssetInput{
-		Kind:        mapKind(kind),
-		Name:        name,
-		SourcePath:  sourcePathFor(kind, fromBase, name),
-		ProjectPath: assetPathFor(kind, root, name),
+		Kind:           mapKind(kind),
+		Name:           name,
+		SourcePath:     sourcePathFor(kind, fromBase, name),
+		ProjectPath:    assetPathFor(kind, root, name),
+		ConflictPolicy: conflictPolicy,
+	}
+	if kind == assetKindCommand {
+		input.CommandMeta = &config.CommandMetaV1{}
 	}
 
 	return s.Service.AddAssetWithOptions(ctx, cfg, input, app.RunOptions{DryRun: dryRun})
@@ -69,8 +96,23 @@ func newDefaultAssetAddService() assetAddService {
 			Planner:             forgePlanner{Workdir: workdir},
 			Executor:            fsops.Engine{},
 			Writer:              config.AtomicFileWriter{Path: filepath.Join(workdir, "weave.yaml")},
+			PathChecker:         appPathChecker{},
+			ConflictPrompter:    stdinConflictPrompter{},
 		},
 		Resolver: newSourceResolver(),
 		Workdir:  workdir,
 	}
+}
+
+type appPathChecker struct{}
+
+func (appPathChecker) Exists(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }

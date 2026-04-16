@@ -68,7 +68,7 @@ func TestAssetAddService_Add_CreatesSymlinkAndPersistsConfig(t *testing.T) {
 	service := newAssetAddService(repo)
 	cfg := config.Default()
 	cfg.Sources.SkillsDir = skillsRoot
-	_, err := service.Add(context.Background(), assetKindSkill, "sdd-orchestrator", "", false, cfg)
+	_, err := service.Add(context.Background(), assetKindSkill, "sdd-orchestrator", "", false, "", cfg)
 	if err != nil {
 		t.Fatalf("add skill: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestAssetAddService_Add_StrictModeKeepsConfigUnchangedOnSymlinkFailure(t *t
 
 	service := newAssetAddService(repo)
 	cfg := config.Default()
-	_, err := service.Add(context.Background(), assetKindSkill, "missing-skill", "", false, cfg)
+	_, err := service.Add(context.Background(), assetKindSkill, "missing-skill", "", false, "", cfg)
 	if err == nil {
 		t.Fatalf("expected add to fail for missing source")
 	}
@@ -149,7 +149,7 @@ func TestAssetAddService_Add_DryRunDoesNotMutateFilesystemOrConfig(t *testing.T)
 	service := newAssetAddService(repo)
 	cfg := config.Default()
 	cfg.Sources.SkillsDir = skillsRoot
-	result, err := service.Add(context.Background(), assetKindSkill, "sdd-orchestrator", "", true, cfg)
+	result, err := service.Add(context.Background(), assetKindSkill, "sdd-orchestrator", "", true, "", cfg)
 	if err != nil {
 		t.Fatalf("dry-run add skill: %v", err)
 	}
@@ -169,6 +169,56 @@ func TestAssetAddService_Add_DryRunDoesNotMutateFilesystemOrConfig(t *testing.T)
 	}
 	if string(after) != string(seed) {
 		t.Fatalf("expected weave.yaml unchanged on dry-run")
+	}
+}
+
+func TestAssetAddService_Add_ConflictSkipPolicyProducesNoMutation(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	skillsRoot := filepath.Join(repo, "shared-skills")
+	skillDir := filepath.Join(skillsRoot, "sdd-orchestrator")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("mkdir skill source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# skill"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+
+	installed := filepath.Join(repo, ".agents", "skills", "sdd-orchestrator", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(installed), 0o755); err != nil {
+		t.Fatalf("mkdir installed dir: %v", err)
+	}
+	if err := os.WriteFile(installed, []byte("existing"), 0o644); err != nil {
+		t.Fatalf("seed installed path: %v", err)
+	}
+
+	seed := []byte("version: 1\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: ~/.weave/commands\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("seed weave.yaml: %v", err)
+	}
+
+	service := newAssetAddService(repo)
+	cfg := config.Default()
+	cfg.Sources.SkillsDir = skillsRoot
+	result, err := service.Add(context.Background(), assetKindSkill, "sdd-orchestrator", "", false, app.ConflictPolicySkip, cfg)
+	if err != nil {
+		t.Fatalf("unexpected add result: %v", err)
+	}
+	if result.OpsPlanned != 0 || result.OpsApplied != 0 {
+		t.Fatalf("expected skip conflict to plan/apply no ops, got %+v", result)
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml unchanged on skip conflict policy")
 	}
 }
 

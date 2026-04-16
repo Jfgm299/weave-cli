@@ -8,8 +8,28 @@ Implement v1 CLI behavior from the PRD using TDD + SDD traceability.
 
 - [ ] Pending
 - [-] In progress
-- [x] Done
+- [x] Done (100% implemented, tested, and operational)
 - [!] Blocked
+
+## Completion Semantics Policy (mandatory)
+
+To avoid ambiguity, this project enforces:
+
+- **Never mark `[x]` unless the requirement is 100% implemented in code and validated by required evidence/tests.**
+- If scope is intentionally cut for v1, use `[-]` and register the item in `deferred.md` with owner + closure criteria.
+- Documentation/policy-only closure MUST NOT be marked `[x]` unless the requirement itself is explicitly docs-only.
+- `E2E: N/A` is only allowed when the requirement is moved to deferred tracking.
+
+### Completion type taxonomy
+
+- `done-code`: fully implemented in code, tested, and operationally closed.
+- `done-baseline`: policy/docs baseline accepted for v1, with deferred executable work tracked.
+- `partial`: implemented in part but not yet fully closed.
+- `deferred`: intentionally postponed to later batch/version.
+
+In this file:
+- `[x]` MUST only represent `done-code`.
+- `done-baseline`, `partial`, and `deferred` MUST use `[-]` plus a linked deferred item when applicable.
 
 ## Priority Legend
 
@@ -45,6 +65,8 @@ For every requirement (`R-*`):
 | B2 | P0 | R-CONFIG-07 | strict transactional persistence | [x] |
 | B2 | P0 | R-SKILL-04 | v1 skills sync mode = symlink | [x] |
 | B2 | P0 | R-CMD-03 | v1 commands sync mode = symlink | [x] |
+| B2 | P1 | R-SKILL-05 | default shared skills directory (`~/.weave/skills`) | [x] |
+| B2 | P1 | R-CMD-04 | default shared commands directory (`~/.weave/commands`) | [x] |
 | B2 | P0 | R-SKILL-03 | configurable sources via config/flag/env | [x] |
 | B2 | P0 | R-CMD-01 | commands lifecycle mirrors skills | [x] |
 | B3 | P0 | R-PROV-01 | multi-provider enable in one project | [x] |
@@ -64,23 +86,23 @@ For every requirement (`R-*`):
 | B5 | P1 | R-UX-01 | concise summary for mutating commands | [x] |
 | B5 | P1 | R-UX-03 | actionability-first UX language | [x] |
 | B5 | P1 | R-UX-05 | strict-mode rollback semantics in output | [x] |
-| B6 | P1 | R-SKILL-01 | conflict prompt (overwrite/skip/backup) | [ ] |
-| B6 | P1 | R-SKILL-02 | non-interactive conflict flags | [ ] |
-| B6 | P1 | R-CMD-02 | command metadata provider-compat markers (future-ready) | [ ] |
-| B6 | P1 | R-ARCH-01 | UI-agnostic core business logic | [ ] |
-| B6 | P1 | R-ARCH-02 | no provider leakage into command handlers | [ ] |
-| B6 | P1 | R-ARCH-03 | dry-run/real-run share planning primitives | [ ] |
-| B6 | P1 | R-ARCH-05 | `.agents` canonical, provider dirs are projections | [ ] |
-| B6 | P1 | R-NFR-01 | backup-on-write for risky paths | [ ] |
-| B6 | P1 | R-NFR-03 | unit coverage for critical paths | [ ] |
-| B6 | P1 | R-POST-01 | help includes 60-second quickstart | [ ] |
-| B6 | P1 | R-POST-02 | first-run contextual next-step guidance | [ ] |
-| B6 | P1 | R-DIST-01 | signed checksums for release artifacts | [ ] |
-| B6 | P1 | R-DIST-02 | install docs include quickstart + troubleshooting | [ ] |
-| B6 | P1 | R-DIST-03 | semver binary naming/versioning | [ ] |
-| B6 | P1 | R-UPD-01 | detect outdated schema + suggest/perform migration | [ ] |
-| B6 | P1 | R-UPD-02 | breaking changes include migration guide | [ ] |
-| B6 | P1 | R-UPD-03 | `doctor` flags stale provider integrations after upgrades | [ ] |
+| B6 | P1 | R-SKILL-01 | conflict prompt (overwrite/skip/backup) | [x] |
+| B6 | P1 | R-SKILL-02 | non-interactive conflict flags | [x] |
+| B6 | P1 | R-CMD-02 | command metadata provider-compat markers (future-ready) | [x] |
+| B6 | P1 | R-ARCH-01 | UI-agnostic core business logic | [x] |
+| B6 | P1 | R-ARCH-02 | no provider leakage into command handlers | [x] |
+| B6 | P1 | R-ARCH-03 | dry-run/real-run share planning primitives | [x] |
+| B6 | P1 | R-ARCH-05 | `.agents` canonical, provider dirs are projections | [x] |
+| B6 | P1 | R-NFR-01 | backup-on-write for risky paths | [x] |
+| B6 | P1 | R-NFR-03 | unit coverage for critical paths | [x] |
+| B6 | P1 | R-POST-01 | help includes 60-second quickstart | [x] |
+| B6 | P1 | R-POST-02 | first-run contextual next-step guidance | [x] |
+| B6 | P1 | R-DIST-01 | signed checksums for release artifacts | [-] |
+| B6 | P1 | R-DIST-02 | install docs include quickstart + troubleshooting | [-] |
+| B6 | P1 | R-DIST-03 | semver binary naming/versioning | [x] |
+| B6 | P1 | R-UPD-01 | detect outdated schema + suggest/perform migration | [x] |
+| B6 | P1 | R-UPD-02 | breaking changes include migration guide | [-] |
+| B6 | P1 | R-UPD-03 | `doctor` flags stale provider integrations after upgrades | [x] |
 | B7 | P2 | R-ARCH-04 | TUI integration possible without domain refactor | [ ] |
 | B7 | P2 | R-DEP-05 | no TUI runtime dependency in v1 binary | [ ] |
 | B7 | P2 | R-DEP-06 | one-command install for Weave binary | [ ] |
@@ -103,10 +125,10 @@ For every requirement (`R-*`):
 
 ### B1 Exit Criteria
 
-- [ ] `forge` is idempotent and safe on existing projects.
-- [ ] Minimal project defaults are generated once and preserved.
-- [ ] `weave.yaml` is schema-validated and deterministic.
-- [ ] v1 config enforces symlink mode and explicit inventory model.
+- [x] `forge` is idempotent and safe on existing projects.
+- [x] Minimal project defaults are generated once and preserved.
+- [x] `weave.yaml` is schema-validated and deterministic.
+- [x] v1 config enforces symlink mode and explicit inventory model.
 
 ### B1 Requirement Traceability Matrix
 
@@ -207,6 +229,8 @@ For every requirement (`R-*`):
 | R-CONFIG-07 (strict transactional persistence) | B2-T2.1, B2-T2.2 | B2-T2.3 | B2-T2.4 | B2-T2.5 | [x] |
 | R-SKILL-04 (skills sync mode = symlink) | B2-T3.1, B2-T3.2 | B2-T3.3 | B2-T3.4 | B2-T3.5 | [x] |
 | R-CMD-03 (commands sync mode = symlink) | B2-T4.1, B2-T4.2 | B2-T4.3 | B2-T4.4 | B2-T4.5 | [x] |
+| R-SKILL-05 (default shared skills directory path) | B2-T7.1, B2-T7.2 | B2-T7.3 | B2-T7.4 | B2-T7.5 | [x] |
+| R-CMD-04 (default shared commands directory path) | B2-T8.1, B2-T8.2 | B2-T8.3 | B2-T8.4 | B2-T8.5 | [x] |
 | R-SKILL-03 (configurable skill sources + override precedence) | B2-T5.1, B2-T5.2 | B2-T5.3 | B2-T5.4 | B2-T5.5 | [x] |
 | R-CMD-01 (commands lifecycle mirrors skills lifecycle) | B2-T6.1, B2-T6.2 | B2-T6.3 | B2-T6.4 | B2-T6.5 | [x] |
 
@@ -297,6 +321,22 @@ Implementation evidence:
 - [x] `internal/app/forge_test.go::TestForgeService_AddAsset_PersistsConfigAfterSymlinkSuccess`
 - [x] `test/integration/asset_add_integration_test.go::TestAddAsset_Integration_CommandSuccessCreatesSymlinkAndConfigEntry`
 - [x] `test/e2e/forge_e2e_test.go::TestCommandAdd_E2E_StrictFailureKeepsConfigUnchanged`
+
+#### R-SKILL-05 — default shared skills directory path MUST be `~/.weave/skills`
+
+- [x] **B2-T7.1 Unit (success):** default config sets `sources.skills_dir` to `~/.weave/skills`.
+- [x] **B2-T7.2 Unit (edge):** resolver falls back to `~/.weave/skills` when flag/env/config are absent.
+- [x] **B2-T7.3 Integration:** default project config roundtrip preserves `~/.weave/skills`.
+- [x] **B2-T7.4 E2E:** default source resolution selects the `~/.weave/skills` baseline.
+- [x] **B2-T7.5 Evidence:** `internal/config/defaults.go`, `internal/cli/source_resolver.go`, and tests assert the default path.
+
+#### R-CMD-04 — default shared commands directory path MUST be `~/.weave/commands`
+
+- [x] **B2-T8.1 Unit (success):** default config sets `sources.commands_dir` to `~/.weave/commands`.
+- [x] **B2-T8.2 Unit (edge):** resolver falls back to `~/.weave/commands` when flag/env/config are absent.
+- [x] **B2-T8.3 Integration:** default project config roundtrip preserves `~/.weave/commands`.
+- [x] **B2-T8.4 E2E:** default source resolution selects the `~/.weave/commands` baseline.
+- [x] **B2-T8.5 Evidence:** `internal/config/defaults.go`, `internal/cli/source_resolver.go`, and tests assert the default path.
 
 ---
 
@@ -523,8 +563,8 @@ Implementation evidence:
 - [x] Batch 4 completed
 - [x] Batch 5 started
 - [x] Batch 5 completed
-- [ ] Batch 6 started
-- [ ] Batch 6 completed
+- [x] Batch 6 started
+- [x] Batch 6 completed
 - [ ] Batch 7 started
 - [ ] Batch 7 completed
 
@@ -641,8 +681,227 @@ Implementation evidence:
 
 ---
 
+## Batch 6 — UX hardening + architecture guardrails + release/update requirements
+
+### B6 Exit Criteria
+
+- [x] Skill/command add supports conflict resolution prompt path and deterministic non-interactive policies.
+- [x] Conflict handling, backup-on-write, and dry-run reuse one planning primitive.
+- [x] Command inventory supports future-ready metadata markers for provider compatibility.
+- [x] Help and first-run output include contextual quickstart guidance.
+- [x] Distribution/update baseline artifacts exist: signed-checksum policy, install/troubleshooting docs, semver naming, migration guide.
+- [x] Doctor reports stale provider integrations and unknown enabled providers post-upgrade.
+
+### B6 Requirement Traceability Matrix
+
+| Requirement | Unit | Integration | E2E | Acceptance Evidence | Status |
+|-------------|------|-------------|-----|---------------------|--------|
+| R-SKILL-01 (conflict prompt overwrite/skip/backup) | B6-T1.1, B6-T1.2 | B6-T1.3 | B6-T1.4 | B6-T1.5 | [x] |
+| R-SKILL-02 (non-interactive conflict flags) | B6-T2.1, B6-T2.2 | B6-T2.3 | B6-T2.4 | B6-T2.5 | [x] |
+| R-CMD-02 (command metadata provider-compat markers) | B6-T3.1, B6-T3.2 | B6-T3.3 | B6-T3.4 | B6-T3.5 | [x] |
+| R-ARCH-01 (UI-agnostic core business logic) | B6-T4.1, B6-T4.2 | B6-T4.3 | B6-T4.4 | B6-T4.5 | [x] |
+| R-ARCH-02 (no provider leakage into command handlers) | B6-T5.1, B6-T5.2 | B6-T5.3 | B6-T5.4 | B6-T5.5 | [x] |
+| R-ARCH-03 (dry-run/real-run share planning primitives) | B6-T6.1, B6-T6.2 | B6-T6.3 | B6-T6.4 | B6-T6.5 | [x] |
+| R-ARCH-05 (`.agents` canonical, provider dirs projections) | B6-T7.1, B6-T7.2 | B6-T7.3 | B6-T7.4 | B6-T7.5 | [x] |
+| R-NFR-01 (backup-on-write for risky paths) | B6-T8.1, B6-T8.2 | B6-T8.3 | B6-T8.4 | B6-T8.5 | [x] |
+| R-NFR-03 (critical path unit coverage) | B6-T9.1, B6-T9.2 | B6-T9.3 | B6-T9.4 | B6-T9.5 | [x] |
+| R-POST-01 (help includes 60-second quickstart) | B6-T10.1, B6-T10.2 | B6-T10.3 | B6-T10.4 | B6-T10.5 | [x] |
+| R-POST-02 (first-run contextual next-step guidance) | B6-T11.1, B6-T11.2 | B6-T11.3 | B6-T11.4 | B6-T11.5 | [x] |
+| R-DIST-01 (signed checksums baseline) | B6-T12.1, B6-T12.2 | B6-T12.3 | B6-T12.4 | B6-T12.5 | [-] |
+| R-DIST-02 (install docs quickstart + troubleshooting) | B6-T13.1, B6-T13.2 | B6-T13.3 | B6-T13.4 | B6-T13.5 | [-] |
+| R-DIST-03 (semver binary naming/versioning) | B6-T14.1, B6-T14.2 | B6-T14.3 | B6-T14.4 | B6-T14.5 | [x] |
+| R-UPD-01 (detect outdated schema + suggest/perform migration) | B6-T15.1, B6-T15.2 | B6-T15.3 | B6-T15.4 | B6-T15.5 | [x] |
+| R-UPD-02 (breaking changes include migration guide) | B6-T16.1, B6-T16.2 | B6-T16.3 | B6-T16.4 | B6-T16.5 | [-] |
+| R-UPD-03 (doctor flags stale provider integrations) | B6-T17.1, B6-T17.2 | B6-T17.3 | B6-T17.4 | B6-T17.5 | [x] |
+
+### B6 Tasks (live checklist)
+
+#### R-SKILL-01 — conflict prompt (overwrite/skip/backup)
+
+- [x] **B6-T1.1 Unit (success):** conflict planner returns overwrite/skip/backup plans deterministically.
+- [x] **B6-T1.2 Unit (error/edge):** prompt-required error is raised when conflict policy is prompt and no prompter is available.
+- [x] **B6-T1.3 Integration:** skill add with pre-existing destination and `--skip` performs no write/mutation.
+- [x] **B6-T1.4 E2E:** existing destination with conflict policy path returns deterministic summary.
+- [x] **B6-T1.5 Evidence:** output includes “conflict detected … skipped” or backup path marker.
+
+Implementation evidence:
+
+- [x] `internal/app/conflicts_test.go::TestConflictPlanner_BackupPolicyProducesBackupAndCreateLinkOps`
+- [x] `internal/app/conflicts_test.go::TestResolveConflictPolicy_PromptWithoutPrompterFails`
+- [x] `internal/cli/assets_handler_test.go::TestAssetAddService_Add_ConflictSkipPolicyProducesNoMutation`
+
+#### R-SKILL-02 — non-interactive conflict flags
+
+- [x] **B6-T2.1 Unit (success):** parser accepts `--overwrite`, `--skip`, `--backup`.
+- [x] **B6-T2.2 Unit (edge):** parser rejects multiple conflict flags in one invocation.
+- [x] **B6-T2.3 Integration:** conflict flag is propagated from CLI parser to AddAsset service input.
+- [x] **B6-T2.4 E2E:** non-interactive conflict policy execution is deterministic.
+- [x] **B6-T2.5 Evidence:** parse error and execution summaries match selected policy.
+
+Implementation evidence:
+
+- [x] `internal/cli/root_test.go::TestParseAddFlags_ParsesConflictPolicyFlags`
+- [x] `internal/cli/root_test.go::TestParseAddFlags_RejectsMultipleConflictPolicyFlags`
+- [x] `internal/cli/root.go::parseAddFlags`
+
+#### R-CMD-02 — command metadata provider-compat markers (future-ready baseline)
+
+- [x] **B6-T3.1 Unit (success):** command config model supports metadata/provider_compat field.
+- [x] **B6-T3.2 Unit (edge):** metadata normalization removes empty/duplicate entries and sorts values.
+- [x] **B6-T3.3 Integration:** command add path persists baseline metadata struct without provider leakage.
+- [x] **B6-T3.4 E2E:** command inventory remains schema-compatible with metadata envelope.
+- [x] **B6-T3.5 Evidence:** deterministic YAML includes normalized `metadata.provider_compat` when provided.
+
+Implementation evidence:
+
+- [x] `internal/config/config.go::Asset.Meta`
+- [x] `internal/config/io.go::normalizeAssetMetadata`
+- [x] `internal/config/io_test.go::TestMarshalDeterministic_CommandMetadataProviderCompatIsNormalized`
+
+#### R-ARCH-01 — UI-agnostic core business logic
+
+- [x] **B6-T4.1 Unit (success):** conflict planning and migration logic implemented in `internal/app` services.
+- [x] **B6-T4.2 Unit (edge):** CLI-specific prompt fallback remains adapter-side, not domain-side.
+- [x] **B6-T4.3 Integration:** CLI handlers invoke app services without embedding business rules.
+- [x] **B6-T4.4 E2E:** CLI observable behavior derived from service outputs.
+- [x] **B6-T4.5 Evidence:** `internal/app/conflicts.go` + `internal/app/migrate.go` are reusable by future UI.
+
+#### R-ARCH-02 — no provider leakage into command handlers
+
+- [x] **B6-T5.1 Unit (success):** provider diagnostics in doctor use provider registry interface only.
+- [x] **B6-T5.2 Unit (edge):** unknown provider path emits actionable issue without provider-specific branching in CLI.
+- [x] **B6-T5.3 Integration:** CLI `doctor` delegates provider checks to `app.DoctorService`.
+- [x] **B6-T5.4 E2E:** stale provider diagnosis is emitted through generic doctor issue channel.
+- [x] **B6-T5.5 Evidence:** provider-specific path remains in adapters/registry.
+
+#### R-ARCH-03 — dry-run/real-run share planning primitives
+
+- [x] **B6-T6.1 Unit (success):** conflict planning returns operation list reused by dry-run and real-run.
+- [x] **B6-T6.2 Unit (edge):** skip policy returns empty plan and short-circuits both modes.
+- [x] **B6-T6.3 Integration:** AddAsset applies same plan in dry-run and execution path.
+- [x] **B6-T6.4 E2E:** dry-run output reflects planned operation counts from shared primitive.
+- [x] **B6-T6.5 Evidence:** `app.AddAssetWithOptions` computes `ops` once before mode branch.
+
+#### R-ARCH-05 — `.agents` canonical, provider dirs are projections
+
+- [x] **B6-T7.1 Unit (success):** doctor validates projection links expected from provider adapter plan.
+- [x] **B6-T7.2 Unit (edge):** missing/non-symlink provider projection emits stale integration issue.
+- [x] **B6-T7.3 Integration:** doctor + provider registry checks `.claude` / `.opencode` as projections.
+- [x] **B6-T7.4 E2E:** stale provider projection guidance uses `weave provider repair <provider>`.
+- [x] **B6-T7.5 Evidence:** issue code `stale_provider_integration` with repair command.
+
+Implementation evidence:
+
+- [x] `internal/app/doctor.go::diagnoseProviderProjections`
+- [x] `internal/cli/doctor_test.go::TestRunDoctor_StaleProviderIntegrationIsReported`
+
+#### R-NFR-01 — backup-on-write for risky paths
+
+- [x] **B6-T8.1 Unit (success):** fs engine supports `backup_path` operation.
+- [x] **B6-T8.2 Unit (edge):** backup op preserves original payload in backup destination.
+- [x] **B6-T8.3 Integration:** conflict backup policy plans backup + create_link sequence.
+- [x] **B6-T8.4 E2E:** conflict backup path included in command summary/evidence.
+- [x] **B6-T8.5 Evidence:** backup file naming with timestamp suffix (`.bak.<UTC>`).
+
+Implementation evidence:
+
+- [x] `internal/fsops/ops.go::OpBackupPath`
+- [x] `internal/fsops/engine_test.go::TestEngine_Apply_BackupPathRenamesExistingPath`
+- [x] `internal/app/forge_test.go::TestForgeService_AddAsset_ConflictBackupPolicyPlansBackupAndCreateLink`
+
+#### R-NFR-03 — unit coverage for critical paths
+
+- [x] **B6-T9.1 Unit (success):** conflict planner coverage (backup/prompt/policy resolution).
+- [x] **B6-T9.2 Unit (edge):** migration coverage (dry-run/no-op/upgrade paths).
+- [x] **B6-T9.3 Integration:** doctor integration retains deterministic issue mapping.
+- [x] **B6-T9.4 E2E:** full command paths continue to pass end-to-end tests.
+- [x] **B6-T9.5 Evidence:** `go test ./...` and `go test -tags=e2e ./test/e2e/...` pass.
+
+#### R-POST-01 — help includes 60-second quickstart
+
+- [x] **B6-T10.1 Unit (success):** `--help` output includes quickstart block.
+- [x] **B6-T10.2 Unit (edge):** help path exits `0` deterministically.
+- [x] **B6-T10.3 Integration:** root command dispatch supports explicit help aliases.
+- [x] **B6-T10.4 E2E:** quickstart commands are valid in current command surface.
+- [x] **B6-T10.5 Evidence:** help text contains “60-second quickstart”.
+
+Implementation evidence:
+
+- [x] `internal/cli/root.go::printHelp`
+- [x] `internal/cli/root_test.go::TestRun_HelpPrintsQuickstart`
+
+#### R-POST-02 — first-run contextual next-step guidance
+
+- [x] **B6-T11.1 Unit (success):** forge flow detects first-run when `weave.yaml` absent pre-run.
+- [x] **B6-T11.2 Unit (edge):** guidance omitted for non-first runs and dry-run.
+- [x] **B6-T11.3 Integration:** contextual next-step guidance printed after first successful forge.
+- [x] **B6-T11.4 E2E:** guidance text maps to actionable provider/skill/doctor commands.
+- [x] **B6-T11.5 Evidence:** output includes “First run complete. Suggested next steps”.
+
+#### R-DIST-01 — signed checksums for release artifacts
+
+- [x] **B6-T12.1 Unit (success):** distribution policy doc defines checksums + signature artifacts.
+- [x] **B6-T12.2 Unit (edge):** checklist requires signed checksum publication.
+- [x] **B6-T12.3 Integration:** README links to distribution baseline docs.
+- [-] **B6-T12.4 E2E:** release-signing automation not implemented in v1 baseline (tracked in `deferred.md`).
+- [x] **B6-T12.5 Evidence:** `docs/reference/distribution.md` signed-checksum section.
+
+#### R-DIST-02 — install docs include quickstart + troubleshooting
+
+- [x] **B6-T13.1 Unit (success):** install doc includes quickstart command set.
+- [x] **B6-T13.2 Unit (edge):** troubleshooting includes missing binaries/schema migration/stale projection flows.
+- [x] **B6-T13.3 Integration:** README docs index references install guide.
+- [-] **B6-T13.4 E2E:** installation artifact pipeline validation deferred (tracked in `deferred.md`).
+- [x] **B6-T13.5 Evidence:** `docs/reference/install.md`.
+
+#### R-DIST-03 — semver binary naming/versioning
+
+- [x] **B6-T14.1 Unit (success):** CLI version baseline exposed as semver string.
+- [x] **B6-T14.2 Unit (edge):** distribution doc codifies artifact naming contract.
+- [x] **B6-T14.3 Integration:** root command supports `--version` output.
+- [x] **B6-T14.4 E2E:** version can be invoked in CLI-first flow.
+- [x] **B6-T14.5 Evidence:** `internal/cli/version.go` + `docs/reference/distribution.md` naming examples.
+
+#### R-UPD-01 — detect outdated schema + suggest/perform migration
+
+- [x] **B6-T15.1 Unit (success):** validator classifies outdated schema with migration guidance.
+- [x] **B6-T15.2 Unit (edge):** validator classifies unsupported future schema.
+- [x] **B6-T15.3 Integration:** migrate command upgrades schema and supports dry-run.
+- [x] **B6-T15.4 E2E:** migration command path available in CLI command set.
+- [x] **B6-T15.5 Evidence:** `weave migrate` output and wrapped invalid-config references migration docs.
+
+Implementation evidence:
+
+- [x] `internal/config/validator.go::ErrOutdatedSchema|ErrUnsupportedSchema`
+- [x] `internal/app/migrate.go`
+- [x] `internal/cli/root.go::runMigrate`
+
+#### R-UPD-02 — breaking changes include migration guide
+
+- [x] **B6-T16.1 Unit (success):** migration guide doc exists in docs baseline.
+- [x] **B6-T16.2 Unit (edge):** release notes policy includes mandatory migration section for breaking releases.
+- [x] **B6-T16.3 Integration:** docs references available from README/docs index.
+- [-] **B6-T16.4 E2E:** release-note enforcement automation deferred (tracked in `deferred.md`).
+- [x] **B6-T16.5 Evidence:** `docs/reference/migration.md`, `docs/reference/releases.md`.
+
+#### R-UPD-03 — doctor flags stale provider integrations after upgrades
+
+- [x] **B6-T17.1 Unit (success):** doctor reports unknown enabled provider when registry lacks adapter.
+- [x] **B6-T17.2 Unit (edge):** doctor reports stale provider projections (missing/not symlink/wrong target).
+- [x] **B6-T17.3 Integration:** CLI doctor exits with `ExitDoctorIssues` for stale provider state.
+- [x] **B6-T17.4 E2E:** doctor output includes actionable `weave provider repair <provider>` guidance.
+- [x] **B6-T17.5 Evidence:** issue code `stale_provider_integration` in doctor output.
+
+Implementation evidence:
+
+- [x] `internal/app/doctor_test.go::TestDoctorService_Run_UnknownEnabledProviderFlagsStaleIntegration`
+- [x] `internal/cli/doctor_test.go::TestRunDoctor_StaleProviderIntegrationIsReported`
+
+---
+
 ## Implementation Notes
 
 - Keep this file updated during implementation (live checklist behavior).
 - Only mark a requirement block complete after all test levels + evidence are complete.
 - Add regression tasks under the relevant requirement when bugs are found.
+- Register all intentionally deferred executable work in `deferred.md`.

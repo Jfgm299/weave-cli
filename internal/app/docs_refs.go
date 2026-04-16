@@ -6,6 +6,7 @@ const (
 	DocsPathConfig       = "docs/reference/config.md"
 	DocsPathTransactions = "docs/reference/transactions.md"
 	DocsPathProviders    = "docs/reference/providers.md"
+	DocsPathMigration    = "docs/reference/migration.md"
 )
 
 func DocsURL(path string) string {

@@ -3,6 +3,8 @@ package app
 import (
 	"errors"
 	"fmt"
+
+	"github.com/Jfgm299/weave-cli/internal/config"
 )
 
 var (
@@ -14,6 +16,9 @@ var (
 func WrapInvalidConfig(err error) error {
 	if err == nil {
 		return ErrInvalidConfig
+	}
+	if errors.Is(err, config.ErrOutdatedSchema) {
+		return fmt.Errorf("%w: %v. See %s (%s)", ErrInvalidConfig, err, DocsPathMigration, DocsURL(DocsPathMigration))
 	}
 	return fmt.Errorf("%w: %v. See %s (%s)", ErrInvalidConfig, err, DocsPathConfig, DocsURL(DocsPathConfig))
 }

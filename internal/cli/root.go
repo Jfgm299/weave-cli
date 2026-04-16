@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -13,17 +14,35 @@ import (
 )
 
 func Run(ctx context.Context, args []string) (int, error) {
+	if len(args) >= 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
+		printHelp()
+		return ExitOK, nil
+	}
+
+	if len(args) >= 1 && (args[0] == "--version" || args[0] == "version") {
+		fmt.Printf("weave %s\n", Version())
+		return ExitOK, nil
+	}
+
 	if len(args) >= 1 && args[0] == "doctor" {
 		return runDoctor(ctx, args[1:])
 	}
 
+	if len(args) >= 1 && args[0] == "migrate" {
+		return runMigrate(ctx, args[1:])
+	}
+
 	if len(args) == 0 {
+		firstRun := !configExists(resolveWorkdir())
 		h := NewDefaultForgeHandler()
 		code, result, err := h.RunWithOptions(ctx, false)
 		if err != nil {
 			return code, err
 		}
 		printForgeSummary(result.ServiceResult)
+		if firstRun {
+			printFirstRunGuidance()
+		}
 		return code, nil
 	}
 
@@ -32,12 +51,16 @@ func Run(ctx context.Context, args []string) (int, error) {
 		if err != nil {
 			return exitCodeForError(err), err
 		}
+		firstRun := !dryRun && !configExists(resolveWorkdir())
 		h := NewDefaultForgeHandler()
 		code, result, err := h.RunWithOptions(ctx, dryRun)
 		if err != nil {
 			return code, err
 		}
 		printForgeSummary(result.ServiceResult)
+		if firstRun {
+			printFirstRunGuidance()
+		}
 		return code, nil
 	}
 
@@ -54,6 +77,37 @@ func Run(ctx context.Context, args []string) (int, error) {
 	}
 
 	return ExitRuntimeError, fmt.Errorf("unsupported command")
+}
+
+func runMigrate(ctx context.Context, args []string) (int, error) {
+	dryRun, err := parseDryRunOnly(args, "migrate")
+	if err != nil {
+		return exitCodeForError(err), err
+	}
+
+	workdir := resolveWorkdir()
+	loader := config.FileLoader{Path: filepath.Join(workdir, "weave.yaml")}
+	cfg, err := loader.LoadOrDefault()
+	if err != nil {
+		return exitCodeForError(app.WrapInvalidConfig(err)), app.WrapInvalidConfig(err)
+	}
+
+	service := app.MigrationService{Writer: config.AtomicFileWriter{Path: filepath.Join(workdir, "weave.yaml")}}
+	result, _, err := service.Migrate(ctx, cfg, dryRun)
+	if err != nil {
+		return exitCodeForError(app.WrapInvalidConfig(err)), app.WrapInvalidConfig(err)
+	}
+
+	if !result.Upgraded {
+		fmt.Printf("migrate: no schema changes needed (version %d).\n", result.To)
+		return ExitOK, nil
+	}
+	if result.DryRun {
+		fmt.Printf("[dry-run] migrate: would upgrade weave.yaml schema from v%d to v%d.\n", result.From, result.To)
+		return ExitOK, nil
+	}
+	fmt.Printf("migrate: upgraded weave.yaml schema from v%d to v%d.\n", result.From, result.To)
+	return ExitOK, nil
 }
 
 func parseDryRunOnly(args []string, command string) (bool, error) {
@@ -113,7 +167,7 @@ func runProvider(ctx context.Context, args []string) (int, error) {
 }
 
 func runAssetAdd(ctx context.Context, kind assetKind, name string, rest []string) (int, error) {
-	fromFlag, dryRun, err := parseAddFlags(rest)
+	fromFlag, dryRun, conflictFlag, err := parseAddFlags(rest)
 	if err != nil {
 		return exitCodeForError(err), err
 	}
@@ -126,7 +180,12 @@ func runAssetAdd(ctx context.Context, kind assetKind, name string, rest []string
 	}
 
 	service := newDefaultAssetAddService()
-	result, err := service.Add(ctx, kind, name, fromFlag, dryRun, cfg)
+	policy := app.ConflictPolicy(cfg.Sync.ConflictPolicy)
+	if conflictFlag != "" {
+		policy = conflictFlag
+	}
+
+	result, err := service.Add(ctx, kind, name, fromFlag, dryRun, policy, cfg)
 	if err != nil {
 		return exitCodeForError(err), err
 	}
@@ -150,7 +209,7 @@ func runDoctor(ctx context.Context, args []string) (int, error) {
 		return exitCodeForError(wrapped), wrapped
 	}
 
-	result, err := (app.DoctorService{}).Run(ctx, workdir, cfg)
+	result, err := (app.DoctorService{ProviderRegistry: providers.NewDefaultRegistry()}).Run(ctx, workdir, cfg)
 	if err != nil {
 		return exitCodeForError(err), err
 	}
@@ -209,13 +268,14 @@ func printDoctorText(result app.DoctorResult) {
 }
 
 func parseFromFlag(args []string) (string, error) {
-	from, _, err := parseAddFlags(args)
+	from, _, _, err := parseAddFlags(args)
 	return from, err
 }
 
-func parseAddFlags(args []string) (string, bool, error) {
+func parseAddFlags(args []string) (string, bool, app.ConflictPolicy, error) {
 	from := ""
 	dryRun := false
+	policy := app.ConflictPolicy("")
 
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -226,7 +286,7 @@ func parseAddFlags(args []string) (string, bool, error) {
 
 		if a == "--from" {
 			if i+1 >= len(args) {
-				return "", false, fmt.Errorf("--from requires a value")
+				return "", false, "", fmt.Errorf("--from requires a value")
 			}
 			from = args[i+1]
 			i++
@@ -238,14 +298,23 @@ func parseAddFlags(args []string) (string, bool, error) {
 			continue
 		}
 
-		if strings.HasPrefix(a, "--") {
-			return "", false, fmt.Errorf("unsupported flag: %s", a)
+		if a == "--overwrite" || a == "--skip" || a == "--backup" {
+			next := app.ConflictPolicy(strings.TrimPrefix(a, "--"))
+			if policy != "" && policy != next {
+				return "", false, "", fmt.Errorf("only one conflict policy flag is allowed: --overwrite, --skip, or --backup")
+			}
+			policy = next
+			continue
 		}
 
-		return "", false, fmt.Errorf("unsupported argument: %s", a)
+		if strings.HasPrefix(a, "--") {
+			return "", false, "", fmt.Errorf("unsupported flag: %s", a)
+		}
+
+		return "", false, "", fmt.Errorf("unsupported argument: %s", a)
 	}
 
-	return from, dryRun, nil
+	return from, dryRun, policy, nil
 }
 
 func parseProviderAction(args []string) (providerAction, string, bool, error) {
@@ -296,6 +365,16 @@ func printAssetAddSummary(kind assetKind, name string, result app.AddAssetResult
 		return
 	}
 
+	if result.ConflictDetected {
+		if result.ConflictAction == string(app.ConflictPolicySkip) {
+			fmt.Printf("%s add %s: conflict detected, skipped by policy. No changes applied.\n", entity, name)
+			return
+		}
+		if result.ConflictAction == string(app.ConflictPolicyBackup) && result.BackupPath != "" {
+			fmt.Printf("%s add %s: conflict detected, existing path backed up to %s before install.\n", entity, name, result.BackupPath)
+		}
+	}
+
 	if result.ConfigSaved {
 		fmt.Printf("%s add %s: applied %d/%d filesystem change(s), weave.yaml updated.\n", entity, name, result.OpsApplied, result.OpsPlanned)
 		return
@@ -320,4 +399,38 @@ func printProviderSummary(action providerAction, result app.ProviderAddResult) {
 	}
 
 	fmt.Printf("provider %s %s: applied %d/%d filesystem change(s), weave.yaml updated.\n", verb, result.Provider, result.OpsApplied, result.OpsPlanned)
+}
+
+func printHelp() {
+	fmt.Println("Weave CLI — Declarative project control plane")
+	fmt.Println("")
+	fmt.Println("Usage:")
+	fmt.Println("  weave [forge]")
+	fmt.Println("  weave skill add <name> [--from <dir>] [--overwrite|--skip|--backup] [--dry-run]")
+	fmt.Println("  weave command add <name> [--from <dir>] [--overwrite|--skip|--backup] [--dry-run]")
+	fmt.Println("  weave provider <add|remove|repair|list> [name] [--dry-run]")
+	fmt.Println("  weave doctor [--json]")
+	fmt.Println("  weave migrate [--dry-run]")
+	fmt.Println("  weave --version")
+	fmt.Println("")
+	fmt.Println("60-second quickstart:")
+	fmt.Println("  1) weave forge")
+	fmt.Println("  2) weave provider add claude-code")
+	fmt.Println("  3) weave skill add sdd-orchestrator")
+	fmt.Println("  4) weave doctor")
+}
+
+func printFirstRunGuidance() {
+	fmt.Println("First run complete. Suggested next steps:")
+	fmt.Println("- weave provider add claude-code")
+	fmt.Println("- weave skill add sdd-orchestrator")
+	fmt.Println("- weave doctor")
+}
+
+func configExists(root string) bool {
+	if root == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(root, "weave.yaml"))
+	return err == nil
 }

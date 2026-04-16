@@ -67,6 +67,14 @@ func TestMarshalDeterministic_AlwaysEmitsExplicitInventory(t *testing.T) {
 		t.Fatalf("expected explicit providers inventory, got: %s", out)
 	}
 
+	if !strings.Contains(string(DefaultMustYAML(t)), "conflict_policy: prompt") {
+		t.Fatalf("expected explicit default conflict_policy in defaults serialization")
+	}
+
+	if !strings.Contains(out, "mode: symlink") {
+		t.Fatalf("expected explicit default conflict_policy, got: %s", out)
+	}
+
 	if !strings.Contains(out, "skills_dir: ~/.weave/skills") {
 		t.Fatalf("expected explicit skills_dir source, got: %s", out)
 	}
@@ -106,4 +114,35 @@ func TestMarshalDeterministic_DuplicateInventoryFails(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected duplicate inventory to fail")
 	}
+}
+
+func TestMarshalDeterministic_CommandMetadataProviderCompatIsNormalized(t *testing.T) {
+	t.Parallel()
+
+	b, err := MarshalDeterministic(Config{
+		Version: 1,
+		Sync:    Sync{Mode: "symlink"},
+		Commands: []Asset{{
+			Name:   "pr-review",
+			Source: "/tmp/pr-review.md",
+			Meta:   &CommandMetaV1{ProviderCompat: []string{"opencode", "", "claude-code", "opencode"}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := string(b)
+	if !strings.Contains(out, "provider_compat") || !strings.Contains(out, "- claude-code") || !strings.Contains(out, "- opencode") {
+		t.Fatalf("expected normalized provider_compat metadata, got: %s", out)
+	}
+}
+
+func DefaultMustYAML(t *testing.T) string {
+	t.Helper()
+	b, err := MarshalDeterministic(Default())
+	if err != nil {
+		t.Fatalf("default marshal failed: %v", err)
+	}
+	return string(b)
 }

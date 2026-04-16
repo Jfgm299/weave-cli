@@ -7,6 +7,7 @@ const (
 	OpWriteFile  OperationType = "write_file"
 	OpCreateLink OperationType = "create_link"
 	OpRemovePath OperationType = "remove_path"
+	OpBackupPath OperationType = "backup_path"
 )
 
 type Operation struct {

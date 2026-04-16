@@ -8,7 +8,8 @@ func Default() Config {
 			CommandsDir: "~/.weave/commands",
 		},
 		Sync: Sync{
-			Mode: "symlink",
+			Mode:           "symlink",
+			ConflictPolicy: "prompt",
 		},
 		Providers: []Provider{},
 		Skills:    []Asset{},
