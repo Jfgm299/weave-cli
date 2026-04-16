@@ -47,6 +47,9 @@ go test ./...
 go run ./cmd/weave --help
 go run ./cmd/weave forge
 go run ./cmd/weave provider add claude-code
+go run ./cmd/weave provider add codex
+go run ./cmd/weave command add pr-review
+go run ./cmd/weave command add pr-review --provider codex
 go run ./cmd/weave doctor
 ```
 
@@ -59,7 +62,7 @@ weave --version
 weave forge [--dry-run]
 
 weave skill add <name> [--from <dir>] [--overwrite|--skip|--backup] [--dry-run]
-weave command add <name> [--from <dir>] [--overwrite|--skip|--backup] [--dry-run]
+weave command add <name> [--provider <name>] [--from <dir>] [--overwrite|--skip|--backup] [--dry-run]
 
 weave provider add <name> [--dry-run]
 weave provider remove <name> [--dry-run]
@@ -70,7 +73,22 @@ weave doctor [--json]
 weave migrate [--dry-run]
 ```
 
-## Asset source and project layout (v1)
+## v2 highlights
+
+- **Provider support**: `claude-code`, `codex`, `opencode`.
+- **Provider-aware command install**:
+  - default: `weave command add <name>` installs shared command + provider projections for all enabled providers
+  - exclusive: `weave command add <name> --provider <name>` installs only the target provider projection
+- **Codex command wrapper namespace**:
+  - `.codex/commands/__weave_commands__/<name>/SKILL.md`
+- **No-provider behavior**:
+  - interactive: prompt `No providers are currently enabled. Continue anyway? [y/N]:`
+  - non-interactive: fail fast with actionable guidance
+- **Transactional guarantees**:
+  - if multi-provider apply fails, rollback is attempted for all planned shared/provider projection paths
+  - `weave.yaml` persists only after successful filesystem apply
+
+## Asset source and project layout
 
 ### Project root requirement
 
@@ -85,6 +103,12 @@ Within the target project, Weave manages canonical assets under:
 - `.agents/docs`
 
 Provider directories are treated as projections/symlinks from this canonical structure.
+
+Current provider projections:
+
+- `.claude/*` -> `../.agents/*`
+- `.codex/*` -> `../.agents/*`
+- `.opencode/*` -> `../.agents/*`
 
 ### Default shared source directories
 
@@ -127,3 +151,7 @@ After this, `weave skill add <name>` and `weave command add <name>` will resolve
 - Distribution baseline: `docs/reference/distribution.md`
 - Migration guide: `docs/reference/migration.md`
 - Release notes policy: `docs/reference/releases.md`
+- Providers + provider-aware command behavior: `docs/reference/providers.md`
+- Doctor checks + repair guidance: `docs/reference/doctor.md`
+- Transaction semantics and rollback guarantees: `docs/reference/transactions.md`
+- Config metadata (`provider_compat`, `shared_install`): `docs/reference/config.md`
