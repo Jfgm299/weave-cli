@@ -73,6 +73,15 @@ func TestInstallFlow_OneCommandScriptAndDocsAreAligned(t *testing.T) {
 	if !strings.Contains(installScript, "./cmd/weave") {
 		t.Fatalf("install script must target ./cmd/weave")
 	}
+	if !strings.Contains(installScript, "GOBIN=\"$BIN_DIR\"") {
+		t.Fatalf("install script must install to deterministic bin dir via GOBIN")
+	}
+	if !strings.Contains(installScript, "append_path_block_if_missing") {
+		t.Fatalf("install script must update POSIX shell PATH configuration")
+	}
+	if !strings.Contains(installScript, "configure_fish_path") {
+		t.Fatalf("install script must update fish PATH configuration")
+	}
 
 	readme := readFile(t, filepath.Join(repoRoot, "README.md"))
 	installDoc := readFile(t, filepath.Join(repoRoot, "docs", "reference", "install.md"))
@@ -83,6 +92,12 @@ func TestInstallFlow_OneCommandScriptAndDocsAreAligned(t *testing.T) {
 		}
 		if !strings.Contains(installDoc, required) {
 			t.Fatalf("docs/reference/install.md must document %q", required)
+		}
+	}
+
+	for _, required := range []string{"~/.local/bin", "fish", "~/.bashrc", "~/.zshrc", "~/.profile"} {
+		if !strings.Contains(installDoc, required) {
+			t.Fatalf("docs/reference/install.md must document PATH setup detail %q", required)
 		}
 	}
 }

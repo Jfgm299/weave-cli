@@ -570,6 +570,7 @@ To avoid mixed definitions of completion:
 6. Native Windows support.
 7. Automatic download/install of skills or commands from remote catalogs.
 8. Global auto-provisioning of assets across all client tools.
+9. If no Git repository is detected, prompt the user to initialize one (`git init`) before continuing.
 
 > Clarification: marketplace/registry-driven asset installation and global auto-distribution are intentionally out of scope for v1.
 

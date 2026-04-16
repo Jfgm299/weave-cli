@@ -14,3 +14,4 @@ Policy:
 | DEF-001 | R-DIST-01 | B6-T12.4 | Release signing automation is not implemented in v1 baseline | Add automated checksum+signature generation in release workflow and validate in CI | v1.x |
 | DEF-002 | R-DIST-02 | B6-T13.4 | Installation artifact pipeline validation is not automated | Add automated install validation against release artifacts in CI | v1.x |
 | DEF-003 | R-UPD-02 | B6-T16.4 | Release-note migration enforcement is policy-only | Add CI gate that fails release PRs missing migration section when breaking changes are present | v1.x |
+| DEF-004 | R-DEP-01 | Post-v1 | Missing Git root currently returns an error with no guided initialization prompt | Add interactive/non-interactive prompt flow to offer `git init` when no `.git` root is detected | v1.x |

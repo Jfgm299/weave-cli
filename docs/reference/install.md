@@ -10,6 +10,15 @@
 ./scripts/install.sh
 ```
 
+The installer places `weave` in `~/.local/bin` (or `WEAVE_BIN_DIR` if set) and writes PATH configuration for:
+
+- `~/.profile`
+- `~/.bashrc`
+- `~/.zshrc`
+- `~/.config/fish/conf.d/weave_path.fish`
+
+If your current shell session does not see `weave` immediately, open a new shell.
+
 ## Verify installation
 
 ```sh
@@ -29,12 +38,18 @@ go run ./cmd/weave doctor
 
 ## Troubleshooting
 
+- **`project root not detected` when running `weave forge`**
+  - Current behavior requires a Git repository root (`.git`) to be present.
+  - Initialize a repository first: `git init`.
+  - Planned improvement: future versions may prompt automatically to create the repository when Git root is missing.
+
 - **Provider add fails with missing binary**
   - Install required provider binaries (`claude`, `opencode`).
   - Re-run `weave provider repair <provider>`.
 - **`weave` command is not found after install**
-  - Ensure `$(go env GOPATH)/bin` (or `~/go/bin`) is in your `PATH`.
+  - The installer writes PATH entries automatically for bash/zsh/fish/profile.
   - Open a new shell and run `weave --version` again.
+  - If you use a custom shell config, add `~/.local/bin` (or your `WEAVE_BIN_DIR`) to PATH manually.
 - **Config validation fails with outdated schema**
   - Run `weave migrate` (or `weave migrate --dry-run` first).
 - **Doctor reports stale provider integration**
