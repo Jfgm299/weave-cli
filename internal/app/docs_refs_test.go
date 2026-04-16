@@ -22,6 +22,7 @@ func TestDocsReferencePaths_ExistInRepository(t *testing.T) {
 		DocsPathTransactions,
 		DocsPathProviders,
 		DocsPathMigration,
+		DocsPathInstall,
 	}
 
 	for _, rel := range required {

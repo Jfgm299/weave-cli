@@ -103,9 +103,9 @@ For every requirement (`R-*`):
 | B6 | P1 | R-UPD-01 | detect outdated schema + suggest/perform migration | [x] |
 | B6 | P1 | R-UPD-02 | breaking changes include migration guide | [-] |
 | B6 | P1 | R-UPD-03 | `doctor` flags stale provider integrations after upgrades | [x] |
-| B7 | P2 | R-ARCH-04 | TUI integration possible without domain refactor | [ ] |
-| B7 | P2 | R-DEP-05 | no TUI runtime dependency in v1 binary | [ ] |
-| B7 | P2 | R-DEP-06 | one-command install for Weave binary | [ ] |
+| B7 | P2 | R-ARCH-04 | TUI integration possible without domain refactor | [x] |
+| B7 | P2 | R-DEP-05 | no TUI runtime dependency in v1 binary | [x] |
+| B7 | P2 | R-DEP-06 | one-command install for Weave binary | [x] |
 
 ---
 
@@ -565,8 +565,8 @@ Implementation evidence:
 - [x] Batch 5 completed
 - [x] Batch 6 started
 - [x] Batch 6 completed
-- [ ] Batch 7 started
-- [ ] Batch 7 completed
+- [x] Batch 7 started
+- [x] Batch 7 completed
 
 ---
 
@@ -896,6 +896,67 @@ Implementation evidence:
 
 - [x] `internal/app/doctor_test.go::TestDoctorService_Run_UnknownEnabledProviderFlagsStaleIntegration`
 - [x] `internal/cli/doctor_test.go::TestRunDoctor_StaleProviderIntegrationIsReported`
+
+---
+
+## Batch 7 — Deferred v1.x hardening
+
+### B7 Exit Criteria
+
+- [x] Core app/domain contracts remain reusable by future UI adapters (including a TUI) without refactoring service boundaries.
+- [x] v1 runtime and module graph remain free of TUI runtime dependencies.
+- [x] One-command install flow exists and is documented consistently across script + docs.
+
+### B7 Requirement Traceability Matrix
+
+| Requirement | Unit | Integration | E2E | Acceptance Evidence | Status |
+|-------------|------|-------------|-----|---------------------|--------|
+| R-ARCH-04 (TUI integration possible without domain refactor) | B7-T1.1, B7-T1.2 | B7-T1.3 | B7-T1.4 | B7-T1.5 | [x] |
+| R-DEP-05 (no TUI runtime dependency in v1 binary) | B7-T2.1, B7-T2.2 | B7-T2.3 | B7-T2.4 | B7-T2.5 | [x] |
+| R-DEP-06 (one-command install for Weave binary) | B7-T3.1, B7-T3.2 | B7-T3.3 | B7-T3.4 | B7-T3.5 | [x] |
+
+### B7 Tasks (live checklist)
+
+#### R-ARCH-04 — TUI integration MUST be possible without refactoring domain contracts
+
+- [x] **B7-T1.1 Unit (success):** boundary test verifies `internal/app` has no `internal/cli` imports.
+- [x] **B7-T1.2 Unit (edge):** boundary test verifies `internal/app` has no direct imports of common TUI modules.
+- [x] **B7-T1.3 Integration:** repository-level integration guard asserts app layer remains reusable outside CLI adapter boundaries.
+- [x] **B7-T1.4 E2E:** existing command-surface E2E suite remains green after adding boundary guards (no command behavior regression).
+- [x] **B7-T1.5 Evidence:** `internal/cli/batch7_boundaries_test.go` and `test/integration/batch7_boundary_integration_test.go` enforce adapter boundaries.
+
+Implementation evidence:
+
+- [x] `internal/cli/batch7_boundaries_test.go::TestArchitectureBoundary_AppLayerHasNoCLINorTUIImports`
+- [x] `test/integration/batch7_boundary_integration_test.go::TestBatch7_Integration_AppLayerIsReusableOutsideCLI`
+
+#### R-DEP-05 — v1 binary MUST have no TUI runtime dependency
+
+- [x] **B7-T2.1 Unit (success):** dependency guard test verifies `go.mod` does not include known TUI runtime modules.
+- [x] **B7-T2.2 Unit (edge):** runtime-source guard test verifies runtime code does not import known TUI modules.
+- [x] **B7-T2.3 Integration:** integration guard verifies module-level dependency contract remains TUI-free.
+- [x] **B7-T2.4 E2E:** existing e2e command suite executes with current non-TUI runtime graph.
+- [x] **B7-T2.5 Evidence:** `go.mod` remains minimal (`gopkg.in/yaml.v3` only) and tests fail-fast on any future TUI import/dependency leak.
+
+Implementation evidence:
+
+- [x] `internal/cli/batch7_boundaries_test.go::TestRuntimeBoundary_V1HasNoTUIRuntimeDependency`
+- [x] `test/integration/batch7_boundary_integration_test.go::TestBatch7_Integration_GoModuleStaysFreeOfTUIRuntimeDeps`
+
+#### R-DEP-06 — distribution MUST support one-command install for Weave binary
+
+- [x] **B7-T3.1 Unit (success):** install-flow test verifies `scripts/install.sh` exists, is executable, and installs with `go install ./cmd/weave`.
+- [x] **B7-T3.2 Unit (edge):** install-flow test verifies docs alignment between README and install reference for command path + verification commands.
+- [x] **B7-T3.3 Integration:** docs/script alignment guard ensures install script and docs stay synchronized.
+- [x] **B7-T3.4 E2E:** `go test -tags=e2e ./test/e2e/...` remains green with install-flow changes.
+- [x] **B7-T3.5 Evidence:** `scripts/install.sh`, `README.md`, and `docs/reference/install.md` provide one-command install + verification path.
+
+Implementation evidence:
+
+- [x] `internal/cli/batch7_boundaries_test.go::TestInstallFlow_OneCommandScriptAndDocsAreAligned`
+- [x] `scripts/install.sh`
+- [x] `README.md`
+- [x] `docs/reference/install.md`
 
 ---
 
