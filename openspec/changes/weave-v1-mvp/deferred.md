@@ -24,7 +24,9 @@ Deferred implementation closure for `DEF-001..DEF-004` is scheduled as Batch 0 i
 
 Current execution status (v2 Batch 0):
 
-- DEF-001: workflow/script implementation complete with local unit evidence (`scripts/release/release_artifacts_test.py`); pending live CI workflow run evidence before closure.
-- DEF-002: install-validation workflow wired and locally exercised through artifact tests; pending live CI workflow run evidence before closure.
-- DEF-003: migration-note gate implementation complete with local unit evidence (`scripts/release/check_migration_gate_test.py`); pending live CI workflow run evidence before closure.
-- DEF-004: guided `git init` flow implementation complete with targeted unit tests (`internal/cli/forge_handler_test.go`) and executed non-interactive e2e evidence (`test/e2e/git_init_guidance_e2e_test.go`); pending interactive e2e branch evidence before closure.
+- DEF-001: closure criteria implemented and evidenced via local script tests + CI run URL in `openspec/changes/weave-v2-codex-routing/tasks.md` (B0 CI Run URLs section).
+- DEF-002: closure criteria implemented and evidenced via local install validation + CI run URL in `openspec/changes/weave-v2-codex-routing/tasks.md` (B0 CI Run URLs section).
+- DEF-003: closure criteria implemented and evidenced via local migration gate tests + CI run URL in `openspec/changes/weave-v2-codex-routing/tasks.md` (B0 CI Run URLs section).
+- DEF-004: guided `git init` behavior implemented and evidenced by unit tests plus targeted e2e for both non-interactive and interactive-decline branches.
+
+Batch 0 status: closed in `openspec/changes/weave-v2-codex-routing/tasks.md`.

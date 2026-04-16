@@ -91,6 +91,15 @@ func TestDefaultIsInteractiveSession_RespectsNonInteractiveEnvOverride(t *testin
 	}
 }
 
+func TestDefaultIsInteractiveSession_ForceInteractiveOverrideWins(t *testing.T) {
+	t.Setenv("WEAVE_NON_INTERACTIVE", "")
+	t.Setenv("WEAVE_FORCE_INTERACTIVE", "1")
+
+	if !defaultIsInteractiveSession() {
+		t.Fatalf("expected force-interactive override to force true")
+	}
+}
+
 func TestProjectRootDetector_InteractivePromptDeclinedFails(t *testing.T) {
 	workdir := t.TempDir()
 	promptCalled := false
