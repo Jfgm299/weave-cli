@@ -134,6 +134,13 @@ Implementation evidence:
   - Result: `ok github.com/Jfgm299/weave-cli/test/e2e`
 - Remaining for full `[x]` closure: GitHub Actions run URLs/logs for T1.4/T1.5/T2.4/T2.5 and interactive CLI e2e evidence for T3.5.
 
+### B0 CI Run URLs (fill to close Batch 0)
+
+- T1.4/T1.5 — `release-artifacts.yml` run URL: _pending_
+- T1.4/T1.5 — `install-artifact-validation.yml` run URL: _pending_
+- T2.4/T2.5 — `migration-note-gate.yml` run URL: _pending_
+- T3.5 — interactive git-init e2e evidence (command output/log link): _pending_
+
 ---
 
 ## Batch 1 — Codex provider integration baseline
