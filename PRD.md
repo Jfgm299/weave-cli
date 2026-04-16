@@ -180,12 +180,14 @@ Initial provider set focuses on highest value:
 | ----------- | -------- | ---------------- |
 | Claude Code | P0       | Full integration |
 | OpenCode    | P0       | Full integration |
+| Codex CLI   | P0       | Full integration |
 
 **Requirements:**
 
 - R-PROV-01: CLI MUST allow enabling multiple providers in one project.
 - R-PROV-02: Provider integration MUST be implemented through provider adapters (interface-based design).
 - R-PROV-03: Provider operations MUST be reversible (remove/repair).
+- R-PROV-04: CLI MUST support `codex` provider with add/remove/repair/list parity.
 
 ### 6.3 Skills Management
 
@@ -211,16 +213,21 @@ Same model as skills, but for reusable custom commands.
 
 | Operation               | Behavior                                                                 |
 | ----------------------- | ------------------------------------------------------------------------ |
-| `command add <name>`    | Adds command via symlink into project-local canonical commands directory |
+| `command add <name>`    | Adds command using provider-aware projection rules                        |
 | `command list`          | Lists available shared commands + installed project commands             |
 | `command remove <name>` | Removes local project command symlink/reference                          |
 
 **Requirements:**
 
 - R-CMD-01: Commands import path and lifecycle MUST mirror skill ergonomics.
-- R-CMD-02: Command metadata SHOULD support provider compatibility markers in future versions.
+- R-CMD-02: Command metadata MUST support provider compatibility markers.
 - R-CMD-03: v1 synchronization mode for commands MUST be `symlink` (not copy).
 - R-CMD-04: Default shared commands directory in v1 MUST be `~/.weave/commands`.
+- R-CMD-05: `command add` without `--provider` MUST install for all enabled providers.
+- R-CMD-06: `command add --provider <name>` MUST install exclusively for that provider and MUST NOT require shared `.agents` command install.
+- R-CMD-07: Codex command wrappers MUST use namespace `__weave_commands__`.
+- R-CMD-08: If no providers are enabled, interactive mode MUST prompt in English with default `[y/N]`.
+- R-CMD-09: If no providers are enabled in non-interactive mode, command add MUST fail automatically with actionable guidance.
 
 ### 6.5 Declarative File (`weave.yaml`)
 
@@ -232,6 +239,8 @@ providers:
   - name: claude-code
     enabled: true
   - name: opencode
+    enabled: true
+  - name: codex
     enabled: true
 skills:
   - name: sdd-orchestrator
@@ -256,6 +265,7 @@ sync:
 - R-CONFIG-05: `weave.yaml` MUST store explicit desired inventory of installed skills and commands.
 - R-CONFIG-06: `skill add` and `command add` MUST update `weave.yaml` atomically after successful filesystem operations.
 - R-CONFIG-07: v1 persistence policy MUST be `strict`: if symlink creation fails, `weave.yaml` MUST NOT be updated.
+- R-CONFIG-08: Provider-aware command installs MUST persist state transactionally across all targeted providers.
 
 ---
 
@@ -293,6 +303,7 @@ Bubble Tea UI will be layered on top of existing command/service primitives:
 - R-UX-03: UX language MUST prioritize actionability over verbosity.
 - R-UX-04: CLI output SHOULD be script-friendly (`--json`) for automation use cases.
 - R-UX-05: On strict-mode failures, CLI MUST surface clear rollback semantics: “no filesystem partial state committed to config”.
+- R-UX-06: Interactive prompts for ambiguous operations MUST default to the safest answer (`No`).
 
 ### 7.4 Initial Command Set
 
@@ -410,9 +421,11 @@ type ProviderAdapter interface {
 - R-ARCH-02: Provider-specific code MUST NOT leak into command handlers.
 - R-ARCH-03: Operation planner MUST support dry-run and real-run using same plan primitives.
 - R-ARCH-04: TUI integration MUST be possible without refactoring domain contracts.
-- R-ARCH-05: Canonical data lives in `.agents`; provider directories are projections via symlinks.
+- R-ARCH-05: Canonical `.agents` data is baseline for shared installs; explicit provider-exclusive installs are also supported.
 - R-ARCH-06: Inventory persistence in `weave.yaml` MUST be treated as transactional state (no partial writes).
 - R-ARCH-07: Symlink operation + config write MUST behave as a single logical transaction in v1 strict mode.
+- R-ARCH-08: Provider-specific command projection logic MUST be encapsulated in provider/app strategy layers, not CLI argument parsing.
+- R-ARCH-09: Multi-provider command operations MUST be all-or-nothing with full rollback on failure.
 
 ---
 
@@ -525,10 +538,10 @@ This rule applies before a requirement is considered done.
 | Requirement | Unit Test(s) | Integration Test(s) | E2E Test(s) | Observable Acceptance Criteria |
 |-------------|--------------|---------------------|-------------|-------------------------------|
 | R-CORE-01 (`forge` idempotent) | planner returns no-op for already-converged state | repeated apply produces same filesystem plan outcome | run `weave forge` twice on same repo | second run has no destructive changes; exit code `0` |
-| R-CONFIG-07 (strict transactional persistence) | config writer not called when symlink op fails | simulated symlink failure rolls back config mutation | `weave skill add` to invalid destination | `weave.yaml` unchanged; non-zero exit; actionable error |
+| R-CONFIG-07 / R-ARCH-09 (strict transactional persistence + rollback) | config writer not called when operation fails | simulated multi-target failure rolls back config mutation | `weave command add` with one provider projection failing | `weave.yaml` unchanged; non-zero exit; actionable error |
 | R-DEP-07 (shell-agnostic CLI) | argument parser independent from shell-specific syntax | command resolution from PATH in isolated env setups | invoke same command from bash/zsh/fish harness | same behavior and exit codes across shells |
 | R-NFR-02 (deterministic exit codes) | domain errors map to fixed code enum | adapter/fs errors propagate stable mapped codes | invalid command state and success path checks | repeated same scenario => identical exit code |
-| R-SKILL-04 / R-CMD-03 (symlink-only sync) | operation planner emits symlink ops only | fs executor rejects copy fallback in v1 mode | add skill/command and inspect resulting links | installed assets are symlinks; no copied payload |
+| R-SKILL-04 / R-CMD-03 / R-CMD-07 (symlink-only sync + codex wrappers) | operation planner emits symlink ops only and codex namespace targets | fs executor rejects copy fallback in v1 mode | add skill/command and inspect resulting links | installed assets are symlinks; codex wrappers use `__weave_commands__` |
 
 ### 13.4 Definition of Done (per critical requirement)
 
@@ -550,6 +563,14 @@ A critical requirement is Done only when all conditions are met:
 
 The PRD defines the mandatory verification contract; detailed test case expansion is maintained in SDD specs/tasks to keep the PRD focused and maintainable.
 
+### 13.6 Completion Semantics (mandatory)
+
+To avoid mixed definitions of completion:
+
+- A requirement can be marked **done** only when it is fully implemented and operationally validated according to this verification strategy.
+- Docs/policy baseline acceptance is allowed in v1 for scoped cuts, but it MUST be tracked as deferred executable work and MUST NOT be represented as fully done.
+- If execution layers are intentionally postponed (for example, release automation or CI enforcement), they MUST be logged in OpenSpec deferred tracking with owner, closure criteria, and target milestone.
+
 ---
 
 ## 14. Future Considerations (Out of Scope for v1)
@@ -562,6 +583,7 @@ The PRD defines the mandatory verification contract; detailed test case expansio
 6. Native Windows support.
 7. Automatic download/install of skills or commands from remote catalogs.
 8. Global auto-provisioning of assets across all client tools.
+9. If no Git repository is detected, prompt the user to initialize one (`git init`) before continuing.
 
 > Clarification: marketplace/registry-driven asset installation and global auto-distribution are intentionally out of scope for v1.
 
@@ -582,7 +604,7 @@ The PRD defines the mandatory verification contract; detailed test case expansio
    - `command list`
    - `command remove`
    - `doctor`
-3. Supports Claude Code + OpenCode adapters.
+3. Supports Claude Code + OpenCode + Codex adapters.
 4. Declarative config file governs setup behavior.
 
 ### Quantitative Targets

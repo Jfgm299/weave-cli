@@ -1,0 +1,43 @@
+name: install-artifact-validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/install.sh'
+      - 'scripts/release/**'
+      - '.github/workflows/install-artifact-validation.yml'
+      - '.github/workflows/release-artifacts.yml'
+  push:
+    branches:
+      - main
+
+jobs:
+  validate-install-from-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Generate signed artifacts (ephemeral key for CI)
+        env:
+          WEAVE_VERSION: ci
+          WEAVE_TARGETS: linux/amd64
+        run: |
+          bash scripts/release/generate_artifacts.sh
+
+      - name: Verify artifacts
+        run: |
+          bash scripts/release/verify_release_artifacts.sh
+
+      - name: Install from generated artifact and smoke test
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          TAR_FILE="dist/weave_ci_linux_amd64.tar.gz"
+          tar -xzf "$TAR_FILE" -C "$HOME/.local/bin"
+          "$HOME/.local/bin/weave" --version

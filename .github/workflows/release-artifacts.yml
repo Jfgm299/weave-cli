@@ -1,0 +1,41 @@
+name: release-artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-sign:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Generate release artifacts and signed checksums
+        env:
+          WEAVE_VERSION: ${{ github.ref_name }}
+          REQUIRE_SIGNING_KEY: "1"
+          WEAVE_SIGNING_PRIVATE_KEY: ${{ secrets.WEAVE_SIGNING_PRIVATE_KEY }}
+        run: |
+          bash scripts/release/generate_artifacts.sh
+
+      - name: Verify release artifacts
+        env:
+          WEAVE_SIGNING_PUBLIC_KEY: ${{ secrets.WEAVE_SIGNING_PUBLIC_KEY }}
+        run: |
+          bash scripts/release/verify_release_artifacts.sh
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: weave-release-${{ github.ref_name }}
+          path: dist/
