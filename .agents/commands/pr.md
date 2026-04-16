@@ -26,8 +26,10 @@ Create a Pull Request from the current branch into `develop`.
 2. Run tests before creating the PR: `go test ./...` — if they fail, STOP and warn the user. Skip tests if changes are documentation-only.
 3. Push branch to remote: `git push -u origin HEAD`
 4. Draft the PR title and body using the template below. **Show the full draft to the user and STOP — wait for explicit confirmation before creating the PR.**
-5. Once confirmed, create the PR with `gh pr create --base develop`
-6. Show the PR URL and STOP — wait for user confirmation before proceeding to merge
+5. Once confirmed, create the PR with `gh pr create --base develop`.
+6. Immediately after PR creation, add exactly one primary `type:*` label using `gh pr edit <number> --add-label "type:<primary>"`.
+7. If the PR is breaking, add `type:breaking-change` as an additional impact label.
+8. Show the PR URL and the labels applied, then STOP — wait for user confirmation before proceeding to merge.
 
 ### Safe command construction (zsh-safe)
 
@@ -43,6 +45,12 @@ EOF
 Never inline raw markdown directly in a quoted one-liner.
 Never execute chained PR-create + merge in a single command.
 Create PR first, then stop and wait for explicit user confirmation before merge.
+
+### Mandatory interaction contract
+
+- Before creating a PR, always print the exact title and full body draft and ask for explicit user approval.
+- Do not create the PR until the user confirms.
+- After creating the PR, always apply labels in the same operation flow and report which labels were added.
 
 ---
 
