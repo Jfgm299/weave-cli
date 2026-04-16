@@ -346,6 +346,323 @@ func TestSkillAdd_E2E_DryRunDoesNotMutateAndPrintsActionableSummary(t *testing.T
 	}
 }
 
+func TestCommandAdd_E2E_DefaultAllEnabledProviders_ProjectsForEachProvider(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	commandsRoot := filepath.Join(repo, "commands-src")
+	if err := os.MkdirAll(commandsRoot, 0o755); err != nil {
+		t.Fatalf("mkdir commands source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsRoot, "pr-review.md"), []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	cfg := []byte("version: 1\nproviders:\n  - name: claude-code\n    enabled: true\n  - name: codex\n    enabled: true\n  - name: opencode\n    enabled: true\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: " + commandsRoot + "\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), cfg, 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"command", "add", "pr-review"}, nil)
+	if err != nil {
+		t.Fatalf("command add failed: %v\n%s", err, out)
+	}
+
+	for _, p := range []string{
+		filepath.Join(repo, ".agents", "commands", "pr-review.md"),
+		filepath.Join(repo, ".codex", "commands", "__weave_commands__", "pr-review", "SKILL.md"),
+	} {
+		fi, err := os.Lstat(p)
+		if err != nil {
+			t.Fatalf("expected projection path %s: %v", p, err)
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("expected %s to be symlink", p)
+		}
+	}
+}
+
+func TestCommandAdd_E2E_ProviderExclusiveCodex_DoesNotRequireSharedAgentsPath(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	commandsRoot := filepath.Join(repo, "commands-src")
+	if err := os.MkdirAll(commandsRoot, 0o755); err != nil {
+		t.Fatalf("mkdir commands source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsRoot, "pr-review.md"), []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(repo, ".agents"), []byte("blocked"), 0o644); err != nil {
+		t.Fatalf("seed blocking .agents path: %v", err)
+	}
+
+	cfg := []byte("version: 1\nproviders: []\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: " + commandsRoot + "\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), cfg, 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"command", "add", "pr-review", "--provider", "codex"}, nil)
+	if err != nil {
+		t.Fatalf("exclusive command add failed: %v\n%s", err, out)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, ".agents", "commands", "pr-review.md")); err == nil {
+		t.Fatalf("expected no shared command path for exclusive install")
+	}
+
+	if fi, err := os.Lstat(filepath.Join(repo, ".codex", "commands", "__weave_commands__", "pr-review", "SKILL.md")); err != nil {
+		t.Fatalf("expected codex wrapper projection: %v", err)
+	} else if fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("expected codex wrapper projection to be symlink")
+	}
+}
+
+func TestCommandAdd_E2E_NoProvidersInteractivePrompt_DefaultNo(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	commandsRoot := filepath.Join(repo, "commands-src")
+	if err := os.MkdirAll(commandsRoot, 0o755); err != nil {
+		t.Fatalf("mkdir commands source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsRoot, "pr-review.md"), []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	cfg := []byte("version: 1\nproviders: []\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: " + commandsRoot + "\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), cfg, 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"command", "add", "pr-review"}, []string{"WEAVE_FORCE_INTERACTIVE=1", "WEAVE_TEST_STDIN=n\n"})
+	if err == nil {
+		t.Fatalf("expected interactive no-provider default-no flow to fail")
+	}
+	if !strings.Contains(out, "No providers are currently enabled. Continue anyway? [y/N]:") {
+		t.Fatalf("expected explicit no-provider prompt, got: %s", out)
+	}
+	if !strings.Contains(out, "command add canceled by user") {
+		t.Fatalf("expected canceled-by-user message, got: %s", out)
+	}
+}
+
+func TestCommandAdd_E2E_NoProvidersInteractivePrompt_EmptyInputDefaultsToNo(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	commandsRoot := filepath.Join(repo, "commands-src")
+	if err := os.MkdirAll(commandsRoot, 0o755); err != nil {
+		t.Fatalf("mkdir commands source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsRoot, "pr-review.md"), []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	cfg := []byte("version: 1\nproviders: []\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: " + commandsRoot + "\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), cfg, 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"command", "add", "pr-review"}, []string{"WEAVE_FORCE_INTERACTIVE=1", "WEAVE_TEST_STDIN=\n"})
+	if err == nil {
+		t.Fatalf("expected interactive no-provider empty-input flow to fail")
+	}
+	if !strings.Contains(out, "No providers are currently enabled. Continue anyway? [y/N]:") {
+		t.Fatalf("expected explicit no-provider prompt, got: %s", out)
+	}
+	if !strings.Contains(out, "command add canceled by user") {
+		t.Fatalf("expected canceled-by-user message, got: %s", out)
+	}
+}
+
+func TestCommandAdd_E2E_NoProvidersNonInteractiveFailsWithGuidance(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	commandsRoot := filepath.Join(repo, "commands-src")
+	if err := os.MkdirAll(commandsRoot, 0o755); err != nil {
+		t.Fatalf("mkdir commands source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsRoot, "pr-review.md"), []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	seed := []byte("version: 1\nproviders: []\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: " + commandsRoot + "\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"command", "add", "pr-review"}, []string{"WEAVE_NON_INTERACTIVE=1"})
+	if err == nil {
+		t.Fatalf("expected non-interactive no-provider flow to fail")
+	}
+	if !strings.Contains(out, "No providers are currently enabled") || !strings.Contains(out, "--provider") {
+		t.Fatalf("expected actionable non-interactive guidance, got: %s", out)
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml unchanged on non-interactive no-provider failure")
+	}
+}
+
+func TestCommandAdd_E2E_MultiProviderFailureRollsBackFilesystemAndConfig(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	commandsRoot := filepath.Join(repo, "commands-src")
+	if err := os.MkdirAll(commandsRoot, 0o755); err != nil {
+		t.Fatalf("mkdir commands source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsRoot, "pr-review.md"), []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	seed := []byte("version: 1\nproviders:\n  - name: claude-code\n    enabled: true\n  - name: codex\n    enabled: true\n  - name: opencode\n    enabled: true\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: " + commandsRoot + "\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	blockedProjectionRoot := filepath.Join(repo, ".codex", "commands", "__weave_commands__")
+	if err := os.MkdirAll(blockedProjectionRoot, 0o755); err != nil {
+		t.Fatalf("mkdir blocked projection root: %v", err)
+	}
+	if err := os.Chmod(blockedProjectionRoot, 0o555); err != nil {
+		t.Fatalf("chmod blocked projection root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(blockedProjectionRoot, 0o755) })
+
+	out, err := runCLI(repo, root, []string{"command", "add", "pr-review"}, nil)
+	if err == nil {
+		t.Fatalf("expected command add to fail when provider projection apply fails")
+	}
+	if !strings.Contains(out, "rollback completed so no config or symlink changes were committed") {
+		t.Fatalf("expected full rollback failure guidance, got: %s", out)
+	}
+
+	if _, err := os.Lstat(filepath.Join(repo, ".agents", "commands", "pr-review.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected shared command projection to be rolled back, got err: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(repo, ".codex", "commands", "__weave_commands__", "pr-review", "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected codex command projection to be absent after rollback, got err: %v", err)
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml unchanged after multi-provider rollback")
+	}
+}
+
+func TestCommandAdd_E2E_MultiProviderSuccessPersistsTransactionalMetadata(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	commandsRoot := filepath.Join(repo, "commands-src")
+	if err := os.MkdirAll(commandsRoot, 0o755); err != nil {
+		t.Fatalf("mkdir commands source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(commandsRoot, "pr-review.md"), []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	cfg := []byte("version: 1\nproviders:\n  - name: claude-code\n    enabled: true\n  - name: codex\n    enabled: true\n  - name: opencode\n    enabled: true\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: " + commandsRoot + "\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), cfg, 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"command", "add", "pr-review"}, nil)
+	if err != nil {
+		t.Fatalf("command add failed: %v\n%s", err, out)
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	content := string(after)
+	if !strings.Contains(content, "provider_compat:") || !strings.Contains(content, "shared_install: true") {
+		t.Fatalf("expected transactional command metadata in config, got: %s", content)
+	}
+}
+
 func runCLI(repo string, root string, args []string, extraEnv []string) (string, error) {
 	cmd := exec.Command("go", "run", "./cmd/weave")
 	if len(args) > 0 {
