@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -167,7 +168,7 @@ func runProvider(ctx context.Context, args []string) (int, error) {
 }
 
 func runAssetAdd(ctx context.Context, kind assetKind, name string, rest []string) (int, error) {
-	fromFlag, dryRun, conflictFlag, err := parseAddFlags(rest)
+	fromFlag, dryRun, conflictFlag, providerFlag, err := parseAddFlags(rest)
 	if err != nil {
 		return exitCodeForError(err), err
 	}
@@ -185,7 +186,12 @@ func runAssetAdd(ctx context.Context, kind assetKind, name string, rest []string
 		policy = conflictFlag
 	}
 
-	result, err := service.Add(ctx, kind, name, fromFlag, dryRun, policy, cfg)
+	plan, err := resolveCommandInstallPlan(kind, providerFlag, cfg)
+	if err != nil {
+		return exitCodeForError(err), err
+	}
+
+	result, err := service.AddWithPlan(ctx, kind, name, fromFlag, dryRun, policy, cfg, plan)
 	if err != nil {
 		return exitCodeForError(err), err
 	}
@@ -268,14 +274,15 @@ func printDoctorText(result app.DoctorResult) {
 }
 
 func parseFromFlag(args []string) (string, error) {
-	from, _, _, err := parseAddFlags(args)
+	from, _, _, _, err := parseAddFlags(args)
 	return from, err
 }
 
-func parseAddFlags(args []string) (string, bool, app.ConflictPolicy, error) {
+func parseAddFlags(args []string) (string, bool, app.ConflictPolicy, string, error) {
 	from := ""
 	dryRun := false
 	policy := app.ConflictPolicy("")
+	provider := ""
 
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -286,7 +293,7 @@ func parseAddFlags(args []string) (string, bool, app.ConflictPolicy, error) {
 
 		if a == "--from" {
 			if i+1 >= len(args) {
-				return "", false, "", fmt.Errorf("--from requires a value")
+				return "", false, "", "", fmt.Errorf("--from requires a value")
 			}
 			from = args[i+1]
 			i++
@@ -301,20 +308,71 @@ func parseAddFlags(args []string) (string, bool, app.ConflictPolicy, error) {
 		if a == "--overwrite" || a == "--skip" || a == "--backup" {
 			next := app.ConflictPolicy(strings.TrimPrefix(a, "--"))
 			if policy != "" && policy != next {
-				return "", false, "", fmt.Errorf("only one conflict policy flag is allowed: --overwrite, --skip, or --backup")
+				return "", false, "", "", fmt.Errorf("only one conflict policy flag is allowed: --overwrite, --skip, or --backup")
 			}
 			policy = next
 			continue
 		}
 
-		if strings.HasPrefix(a, "--") {
-			return "", false, "", fmt.Errorf("unsupported flag: %s", a)
+		if a == "--provider" {
+			if i+1 >= len(args) {
+				return "", false, "", "", fmt.Errorf("--provider requires a value")
+			}
+			if provider != "" && provider != args[i+1] {
+				return "", false, "", "", fmt.Errorf("--provider can only be set once")
+			}
+			provider = strings.TrimSpace(args[i+1])
+			i++
+			continue
 		}
 
-		return "", false, "", fmt.Errorf("unsupported argument: %s", a)
+		if strings.HasPrefix(a, "--provider=") {
+			next := strings.TrimSpace(strings.TrimPrefix(a, "--provider="))
+			if provider != "" && provider != next {
+				return "", false, "", "", fmt.Errorf("--provider can only be set once")
+			}
+			provider = next
+			continue
+		}
+
+		if strings.HasPrefix(a, "--") {
+			return "", false, "", "", fmt.Errorf("unsupported flag: %s", a)
+		}
+
+		return "", false, "", "", fmt.Errorf("unsupported argument: %s", a)
 	}
 
-	return from, dryRun, policy, nil
+	return from, dryRun, policy, provider, nil
+}
+
+func resolveCommandInstallPlan(kind assetKind, providerFlag string, cfg config.Config) (*app.CommandInstallPlan, error) {
+	return resolveCommandInstallPlanWithDeps(kind, providerFlag, cfg, app.CommandInstallPlanner{Registry: providers.NewDefaultRegistry()})
+}
+
+func resolveCommandInstallPlanWithDeps(kind assetKind, providerFlag string, cfg config.Config, planner app.CommandInstallPlanner) (*app.CommandInstallPlan, error) {
+	if kind != assetKindCommand {
+		if strings.TrimSpace(providerFlag) != "" {
+			return nil, fmt.Errorf("--provider is only supported for `weave command add`")
+		}
+		return nil, nil
+	}
+
+	plan, err := planner.Resolve(providerFlag, cfg, isInteractiveSession(), promptNoProvidersContinue)
+	if err != nil {
+		return nil, err
+	}
+	return &plan, nil
+}
+
+func promptNoProvidersContinue() (bool, error) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("No providers are currently enabled. Continue anyway? [y/N]: ")
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return false, err
+	}
+	choice := strings.TrimSpace(strings.ToLower(line))
+	return choice == "y" || choice == "yes", nil
 }
 
 func parseProviderAction(args []string) (providerAction, string, bool, error) {
@@ -407,7 +465,7 @@ func printHelp() {
 	fmt.Println("Usage:")
 	fmt.Println("  weave [forge]")
 	fmt.Println("  weave skill add <name> [--from <dir>] [--overwrite|--skip|--backup] [--dry-run]")
-	fmt.Println("  weave command add <name> [--from <dir>] [--overwrite|--skip|--backup] [--dry-run]")
+	fmt.Println("  weave command add <name> [--provider <name>] [--from <dir>] [--overwrite|--skip|--backup] [--dry-run]")
 	fmt.Println("  weave provider <add|remove|repair|list> [name] [--dry-run]")
 	fmt.Println("  weave doctor [--json]")
 	fmt.Println("  weave migrate [--dry-run]")

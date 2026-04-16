@@ -15,6 +15,7 @@ type Registry struct {
 func NewDefaultRegistry() Registry {
 	adapters := map[string]app.ProviderAdapter{
 		"claude-code": ClaudeCodeAdapter{},
+		"codex":       CodexAdapter{},
 		"opencode":    OpenCodeAdapter{},
 	}
 
@@ -77,6 +78,28 @@ func (OpenCodeAdapter) PlanRepair(projectRoot string) ([]fsops.Operation, error)
 
 func (OpenCodeAdapter) PlanRemove(projectRoot string) ([]fsops.Operation, error) {
 	return []fsops.Operation{{Type: fsops.OpRemovePath, Path: filepath.Join(projectRoot, ".opencode")}}, nil
+}
+
+type CodexAdapter struct{}
+
+func (CodexAdapter) Name() string { return "codex" }
+
+func (CodexAdapter) RequiredBinaries() []string { return []string{"codex"} }
+
+func (CodexAdapter) PlanSetup(projectRoot string) ([]fsops.Operation, error) {
+	return []fsops.Operation{
+		link(filepath.Join(projectRoot, ".codex", "AGENTS.md"), filepath.Join("..", ".agents", "AGENTS.md")),
+		link(filepath.Join(projectRoot, ".codex", "commands"), filepath.Join("..", ".agents", "commands")),
+		link(filepath.Join(projectRoot, ".codex", "docs"), filepath.Join("..", ".agents", "docs")),
+	}, nil
+}
+
+func (CodexAdapter) PlanRepair(projectRoot string) ([]fsops.Operation, error) {
+	return CodexAdapter{}.PlanSetup(projectRoot)
+}
+
+func (CodexAdapter) PlanRemove(projectRoot string) ([]fsops.Operation, error) {
+	return []fsops.Operation{{Type: fsops.OpRemovePath, Path: filepath.Join(projectRoot, ".codex")}}, nil
 }
 
 func link(path string, target string) fsops.Operation {

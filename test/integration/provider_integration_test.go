@@ -27,6 +27,7 @@ func TestProviderAdd_Integration_EnablesMultipleProvidersAndCreatesProjectionLin
 		Writer:              config.AtomicFileWriter{Path: filepath.Join(repo, "weave.yaml")},
 		BinaryResolver: providerBinaryResolverStub{paths: map[string]string{
 			"claude":   "/usr/local/bin/claude",
+			"codex":    "/usr/local/bin/codex",
 			"opencode": "/usr/local/bin/opencode",
 		}},
 	}
@@ -52,14 +53,26 @@ func TestProviderAdd_Integration_EnablesMultipleProvidersAndCreatesProjectionLin
 		t.Fatalf("load config after second add: %v", err)
 	}
 
-	if len(loaded.Providers) != 2 {
-		t.Fatalf("expected two enabled providers, got %+v", loaded.Providers)
+	if _, err := svc.AddProvider(context.Background(), loaded, registry, "codex"); err != nil {
+		t.Fatalf("add codex: %v", err)
+	}
+
+	loaded, err = (config.FileLoader{Path: filepath.Join(repo, "weave.yaml")}).LoadOrDefault()
+	if err != nil {
+		t.Fatalf("load config after third add: %v", err)
+	}
+
+	if len(loaded.Providers) != 3 {
+		t.Fatalf("expected three enabled providers, got %+v", loaded.Providers)
 	}
 
 	for _, p := range []string{
 		filepath.Join(repo, ".claude", "CLAUDE.md"),
 		filepath.Join(repo, ".claude", "commands"),
 		filepath.Join(repo, ".claude", "docs"),
+		filepath.Join(repo, ".codex", "AGENTS.md"),
+		filepath.Join(repo, ".codex", "commands"),
+		filepath.Join(repo, ".codex", "docs"),
 		filepath.Join(repo, ".opencode", "AGENTS.md"),
 		filepath.Join(repo, ".opencode", "commands"),
 		filepath.Join(repo, ".opencode", "docs"),
@@ -71,6 +84,51 @@ func TestProviderAdd_Integration_EnablesMultipleProvidersAndCreatesProjectionLin
 		if fi.Mode()&os.ModeSymlink == 0 {
 			t.Fatalf("expected provider projection %s to be symlink", p)
 		}
+	}
+}
+
+func TestProviderAdd_Integration_CodexMissingBinaryKeepsConfigUnchanged(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	seed := []byte("version: 1\nproviders:\n  - name: opencode\n    enabled: true\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: ~/.weave/commands\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("seed weave.yaml: %v", err)
+	}
+
+	svc := app.ProviderService{
+		ProjectRootDetector: integrationDetector{root: repo},
+		ConfigValidator:     integrationValidator{},
+		Executor:            fsops.Engine{},
+		Writer:              config.AtomicFileWriter{Path: filepath.Join(repo, "weave.yaml")},
+		BinaryResolver: providerBinaryResolverStub{paths: map[string]string{
+			"opencode": "/usr/local/bin/opencode",
+		}},
+	}
+
+	_, err := svc.AddProvider(context.Background(), config.Config{
+		Version:   1,
+		Providers: []config.Provider{{Name: "opencode", Enabled: true}},
+		Sources:   config.Sources{SkillsDir: "~/.weave/skills", CommandsDir: "~/.weave/commands"},
+		Sync:      config.Sync{Mode: "symlink"},
+		Skills:    []config.Asset{},
+		Commands:  []config.Asset{},
+	}, providers.NewDefaultRegistry(), "codex")
+	if err == nil {
+		t.Fatalf("expected codex provider add failure when binary is missing")
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml unchanged when codex binary dependency is missing")
 	}
 }
 
