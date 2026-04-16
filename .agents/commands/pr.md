@@ -95,7 +95,8 @@ Closes #
 ## ✅ Contributor Checklist
 
 - [ ] Linked issue above (`Closes #N`)
-- [ ] Added exactly one `type:*` label to this PR
+- [ ] Added exactly one primary `type:*` label to this PR (`type:feature|bug|docs|refactor|chore|style|perf|test|build|ci|revert`)
+- [ ] Added `type:breaking-change` only if this PR introduces a breaking change
 - [ ] Tests pass locally
 - [ ] Docs updated if behavior changed (`/update-docs`)
 - [ ] Commits follow conventional commits format
@@ -107,7 +108,8 @@ Closes #
 
 ```
 
-Add the corresponding `type:*` label to the PR after creation using `gh pr edit <number> --add-label "type:feature"`.
+Add the corresponding primary `type:*` label to the PR after creation using `gh pr edit <number> --add-label "type:feature"`.
+If applicable, add `type:breaking-change` as an additional impact label.
 
 ---
 
