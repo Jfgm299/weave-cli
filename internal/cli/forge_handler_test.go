@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Jfgm299/weave-cli/internal/app"
@@ -40,6 +41,20 @@ func TestForgeHandler_Run_ReturnsInvalidConfigExitCode(t *testing.T) {
 	}
 }
 
+func TestProjectRootDetector_FailsWhenNoGitAncestorExists(t *testing.T) {
+	workdir := t.TempDir()
+	detector := projectRootDetector{Workdir: workdir}
+
+	_, err := detector.Detect(context.Background())
+	if err == nil {
+		t.Fatalf("expected root detection failure without .git")
+	}
+
+	if !strings.Contains(err.Error(), "project root not detected") {
+		t.Fatalf("expected actionable root detection error, got %q", err.Error())
+	}
+}
+
 func TestForgeHandler_Run_ReturnsExitOKWhenSuccessful(t *testing.T) {
 	tmp := t.TempDir()
 	if err := os.Mkdir(filepath.Join(tmp, ".git"), 0o755); err != nil {
@@ -61,6 +76,60 @@ func TestForgeHandler_Run_ReturnsExitOKWhenSuccessful(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(tmp, "weave.yaml")); err != nil {
 		t.Fatalf("expected weave.yaml written: %v", err)
+	}
+}
+
+func TestProjectRootDetector_DetectsRepositoryRootFromNestedWorkdir(t *testing.T) {
+	repo := t.TempDir()
+	nested := filepath.Join(repo, "a", "b", "c")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir nested: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	detector := projectRootDetector{Workdir: nested}
+	root, err := detector.Detect(context.Background())
+	if err != nil {
+		t.Fatalf("detect root: %v", err)
+	}
+
+	if root != repo {
+		t.Fatalf("expected detected root %q, got %q", repo, root)
+	}
+}
+
+func TestForgeHandler_RunWithOptions_DryRunDoesNotMutate(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	t.Setenv("WEAVE_WORKDIR", repo)
+
+	h := NewDefaultForgeHandler()
+	code, result, err := h.RunWithOptions(context.Background(), true)
+	if err != nil {
+		t.Fatalf("dry-run forge failed: %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("expected ExitOK, got %d", code)
+	}
+
+	if !result.ServiceResult.DryRun {
+		t.Fatalf("expected dry-run result")
+	}
+
+	if result.ServiceResult.OpsApplied != 0 {
+		t.Fatalf("expected no applied ops in dry-run, got %d", result.ServiceResult.OpsApplied)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, ".agents", "skills")); !os.IsNotExist(err) {
+		t.Fatalf("expected no .agents/skills created on dry-run, got err: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, "weave.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("expected no weave.yaml write on dry-run, got err: %v", err)
 	}
 }
 

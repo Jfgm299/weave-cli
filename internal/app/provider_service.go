@@ -46,11 +46,19 @@ type ProviderAddResult struct {
 	Root        string
 	Provider    string
 	Added       bool
+	Removed     bool
+	Repaired    bool
+	DryRun      bool
+	OpsPlanned  int
 	OpsApplied  int
 	ConfigSaved bool
 }
 
 func (s ProviderService) AddProvider(ctx context.Context, cfg config.Config, registry ProviderRegistry, providerName string) (ProviderAddResult, error) {
+	return s.AddProviderWithOptions(ctx, cfg, registry, providerName, RunOptions{})
+}
+
+func (s ProviderService) AddProviderWithOptions(ctx context.Context, cfg config.Config, registry ProviderRegistry, providerName string, opts RunOptions) (ProviderAddResult, error) {
 	root, err := s.ProjectRootDetector.Detect(ctx)
 	if err != nil {
 		return ProviderAddResult{}, ErrNotInProjectRoot
@@ -63,11 +71,11 @@ func (s ProviderService) AddProvider(ctx context.Context, cfg config.Config, reg
 	adapter, ok := registry.Get(providerName)
 	if !ok {
 		supported := strings.Join(sortedStrings(registry.SupportedNames()), ", ")
-		return ProviderAddResult{}, fmt.Errorf("%w: %s. Supported providers: %s", ErrUnsupportedProvider, providerName, supported)
+		return ProviderAddResult{}, fmt.Errorf("%w: %s. Supported providers: %s. See %s (%s)", ErrUnsupportedProvider, providerName, supported, DocsPathProviders, DocsURL(DocsPathProviders))
 	}
 
 	if missing := s.missingBinaries(adapter.RequiredBinaries()); len(missing) > 0 {
-		return ProviderAddResult{}, fmt.Errorf("%w for provider %q: %s. Install the missing binaries and run `weave provider repair %s`.", ErrMissingProviderBinaries, adapter.Name(), strings.Join(missing, ", "), adapter.Name())
+		return ProviderAddResult{}, fmt.Errorf("%w for provider %q: %s. Install the missing binaries and run `weave provider repair %s`. See %s (%s)", ErrMissingProviderBinaries, adapter.Name(), strings.Join(missing, ", "), adapter.Name(), DocsPathProviders, DocsURL(DocsPathProviders))
 	}
 
 	ops, err := adapter.PlanSetup(root)
@@ -75,29 +83,39 @@ func (s ProviderService) AddProvider(ctx context.Context, cfg config.Config, reg
 		return ProviderAddResult{}, err
 	}
 
+	if err := ensureOpsWithinRoot(root, ops); err != nil {
+		return ProviderAddResult{}, err
+	}
+
+	result := ProviderAddResult{Root: root, Provider: adapter.Name(), Added: true, DryRun: opts.DryRun, OpsPlanned: len(ops)}
+
+	if opts.DryRun {
+		return result, nil
+	}
+
 	if len(ops) > 0 {
 		if err := s.Executor.Apply(ctx, ops); err != nil {
-			return ProviderAddResult{}, fmt.Errorf("failed to apply provider setup operations for %q: %w. Run `weave provider repair %s` after fixing the filesystem issue", adapter.Name(), err, adapter.Name())
+			return ProviderAddResult{}, fmt.Errorf("failed to apply provider setup operations for %q: %w. Run `weave provider repair %s` after fixing the filesystem issue. See %s (%s)", adapter.Name(), err, adapter.Name(), DocsPathProviders, DocsURL(DocsPathProviders))
 		}
+		result.OpsApplied = len(ops)
 	}
 
 	nextCfg := cfg
 	nextCfg.Providers = upsertProvider(nextCfg.Providers, config.Provider{Name: adapter.Name(), Enabled: true})
 
 	if err := s.Writer.Write(nextCfg); err != nil {
-		return ProviderAddResult{}, fmt.Errorf("provider setup applied but failed to persist weave.yaml: %w. Re-run `weave provider repair %s`", err, adapter.Name())
+		return ProviderAddResult{}, fmt.Errorf("provider setup applied but failed to persist weave.yaml: %w. Re-run `weave provider repair %s`. See %s (%s)", err, adapter.Name(), DocsPathTransactions, DocsURL(DocsPathTransactions))
 	}
 
-	return ProviderAddResult{
-		Root:        root,
-		Provider:    adapter.Name(),
-		Added:       true,
-		OpsApplied:  len(ops),
-		ConfigSaved: true,
-	}, nil
+	result.ConfigSaved = true
+	return result, nil
 }
 
 func (s ProviderService) RemoveProvider(ctx context.Context, cfg config.Config, registry ProviderRegistry, providerName string) (ProviderAddResult, error) {
+	return s.RemoveProviderWithOptions(ctx, cfg, registry, providerName, RunOptions{})
+}
+
+func (s ProviderService) RemoveProviderWithOptions(ctx context.Context, cfg config.Config, registry ProviderRegistry, providerName string, opts RunOptions) (ProviderAddResult, error) {
 	root, err := s.ProjectRootDetector.Detect(ctx)
 	if err != nil {
 		return ProviderAddResult{}, ErrNotInProjectRoot
@@ -110,7 +128,7 @@ func (s ProviderService) RemoveProvider(ctx context.Context, cfg config.Config, 
 	adapter, ok := registry.Get(providerName)
 	if !ok {
 		supported := strings.Join(sortedStrings(registry.SupportedNames()), ", ")
-		return ProviderAddResult{}, fmt.Errorf("%w: %s. Supported providers: %s", ErrUnsupportedProvider, providerName, supported)
+		return ProviderAddResult{}, fmt.Errorf("%w: %s. Supported providers: %s. See %s (%s)", ErrUnsupportedProvider, providerName, supported, DocsPathProviders, DocsURL(DocsPathProviders))
 	}
 
 	ops, err := adapter.PlanRemove(root)
@@ -118,23 +136,39 @@ func (s ProviderService) RemoveProvider(ctx context.Context, cfg config.Config, 
 		return ProviderAddResult{}, err
 	}
 
+	if err := ensureOpsWithinRoot(root, ops); err != nil {
+		return ProviderAddResult{}, err
+	}
+
+	result := ProviderAddResult{Root: root, Provider: adapter.Name(), Removed: true, DryRun: opts.DryRun, OpsPlanned: len(ops)}
+
+	if opts.DryRun {
+		return result, nil
+	}
+
 	if len(ops) > 0 {
 		if err := s.Executor.Apply(ctx, ops); err != nil {
-			return ProviderAddResult{}, fmt.Errorf("failed to remove provider %q operations: %w. Run `weave provider repair %s` to reconcile", adapter.Name(), err, adapter.Name())
+			return ProviderAddResult{}, fmt.Errorf("failed to remove provider %q operations: %w. Run `weave provider repair %s` to reconcile. See %s (%s)", adapter.Name(), err, adapter.Name(), DocsPathProviders, DocsURL(DocsPathProviders))
 		}
+		result.OpsApplied = len(ops)
 	}
 
 	nextCfg := cfg
 	nextCfg.Providers = removeProvider(nextCfg.Providers, adapter.Name())
 
 	if err := s.Writer.Write(nextCfg); err != nil {
-		return ProviderAddResult{}, fmt.Errorf("provider remove applied but failed to persist weave.yaml: %w. Re-run `weave provider repair %s`", err, adapter.Name())
+		return ProviderAddResult{}, fmt.Errorf("provider remove applied but failed to persist weave.yaml: %w. Re-run `weave provider repair %s`. See %s (%s)", err, adapter.Name(), DocsPathTransactions, DocsURL(DocsPathTransactions))
 	}
 
-	return ProviderAddResult{Root: root, Provider: adapter.Name(), OpsApplied: len(ops), ConfigSaved: true}, nil
+	result.ConfigSaved = true
+	return result, nil
 }
 
 func (s ProviderService) RepairProvider(ctx context.Context, cfg config.Config, registry ProviderRegistry, providerName string) (ProviderAddResult, error) {
+	return s.RepairProviderWithOptions(ctx, cfg, registry, providerName, RunOptions{})
+}
+
+func (s ProviderService) RepairProviderWithOptions(ctx context.Context, cfg config.Config, registry ProviderRegistry, providerName string, opts RunOptions) (ProviderAddResult, error) {
 	root, err := s.ProjectRootDetector.Detect(ctx)
 	if err != nil {
 		return ProviderAddResult{}, ErrNotInProjectRoot
@@ -147,11 +181,11 @@ func (s ProviderService) RepairProvider(ctx context.Context, cfg config.Config, 
 	adapter, ok := registry.Get(providerName)
 	if !ok {
 		supported := strings.Join(sortedStrings(registry.SupportedNames()), ", ")
-		return ProviderAddResult{}, fmt.Errorf("%w: %s. Supported providers: %s", ErrUnsupportedProvider, providerName, supported)
+		return ProviderAddResult{}, fmt.Errorf("%w: %s. Supported providers: %s. See %s (%s)", ErrUnsupportedProvider, providerName, supported, DocsPathProviders, DocsURL(DocsPathProviders))
 	}
 
 	if missing := s.missingBinaries(adapter.RequiredBinaries()); len(missing) > 0 {
-		return ProviderAddResult{}, fmt.Errorf("%w for provider %q: %s. Install the missing binaries and run `weave provider repair %s`.", ErrMissingProviderBinaries, adapter.Name(), strings.Join(missing, ", "), adapter.Name())
+		return ProviderAddResult{}, fmt.Errorf("%w for provider %q: %s. Install the missing binaries and run `weave provider repair %s`. See %s (%s)", ErrMissingProviderBinaries, adapter.Name(), strings.Join(missing, ", "), adapter.Name(), DocsPathProviders, DocsURL(DocsPathProviders))
 	}
 
 	ops, err := adapter.PlanRepair(root)
@@ -159,20 +193,32 @@ func (s ProviderService) RepairProvider(ctx context.Context, cfg config.Config, 
 		return ProviderAddResult{}, err
 	}
 
+	if err := ensureOpsWithinRoot(root, ops); err != nil {
+		return ProviderAddResult{}, err
+	}
+
+	result := ProviderAddResult{Root: root, Provider: adapter.Name(), Repaired: true, DryRun: opts.DryRun, OpsPlanned: len(ops)}
+
+	if opts.DryRun {
+		return result, nil
+	}
+
 	if len(ops) > 0 {
 		if err := s.Executor.Apply(ctx, ops); err != nil {
-			return ProviderAddResult{}, fmt.Errorf("failed to repair provider %q operations: %w. Re-run `weave provider repair %s` after fixing the filesystem issue", adapter.Name(), err, adapter.Name())
+			return ProviderAddResult{}, fmt.Errorf("failed to repair provider %q operations: %w. Re-run `weave provider repair %s` after fixing the filesystem issue. See %s (%s)", adapter.Name(), err, adapter.Name(), DocsPathProviders, DocsURL(DocsPathProviders))
 		}
+		result.OpsApplied = len(ops)
 	}
 
 	nextCfg := cfg
 	nextCfg.Providers = upsertProvider(nextCfg.Providers, config.Provider{Name: adapter.Name(), Enabled: true})
 
 	if err := s.Writer.Write(nextCfg); err != nil {
-		return ProviderAddResult{}, fmt.Errorf("provider repair applied but failed to persist weave.yaml: %w. Re-run `weave provider repair %s`", err, adapter.Name())
+		return ProviderAddResult{}, fmt.Errorf("provider repair applied but failed to persist weave.yaml: %w. Re-run `weave provider repair %s`. See %s (%s)", err, adapter.Name(), DocsPathTransactions, DocsURL(DocsPathTransactions))
 	}
 
-	return ProviderAddResult{Root: root, Provider: adapter.Name(), OpsApplied: len(ops), ConfigSaved: true}, nil
+	result.ConfigSaved = true
+	return result, nil
 }
 
 func ListEnabledProviders(cfg config.Config) []config.Provider {

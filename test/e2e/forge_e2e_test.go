@@ -272,6 +272,79 @@ func TestAssetAdd_E2E_UsesSourcePrecedenceAndSymlinkOnly(t *testing.T) {
 	}
 }
 
+func TestForge_E2E_DryRunDoesNotMutateAndPrintsActionableSummary(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"forge", "--dry-run"}, nil)
+	if err != nil {
+		t.Fatalf("dry-run forge failed: %v\n%s", err, out)
+	}
+
+	if !strings.Contains(out, "[dry-run] forge: planned") || !strings.Contains(out, "rerun `weave forge` without --dry-run") {
+		t.Fatalf("expected concise actionable dry-run summary, got: %s", out)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, ".agents", "skills")); !os.IsNotExist(err) {
+		t.Fatalf("expected no .agents/skills created on dry-run, got err: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, "weave.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("expected no weave.yaml created on dry-run, got err: %v", err)
+	}
+}
+
+func TestSkillAdd_E2E_DryRunDoesNotMutateAndPrintsActionableSummary(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	skillsRoot := filepath.Join(repo, "skills-src")
+	if err := os.MkdirAll(filepath.Join(skillsRoot, "sdd-orchestrator"), 0o755); err != nil {
+		t.Fatalf("mkdir skills source: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillsRoot, "sdd-orchestrator", "SKILL.md"), []byte("# skill"), 0o644); err != nil {
+		t.Fatalf("write SKILL.md: %v", err)
+	}
+
+	cfg := []byte("version: 1\nsources:\n  skills_dir: " + skillsRoot + "\n  commands_dir: ~/.weave/commands\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), cfg, 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"skill", "add", "sdd-orchestrator", "--dry-run"}, nil)
+	if err != nil {
+		t.Fatalf("dry-run skill add failed: %v\n%s", err, out)
+	}
+
+	if !strings.Contains(out, "[dry-run] skill add sdd-orchestrator") || !strings.Contains(out, "rerun without --dry-run") {
+		t.Fatalf("expected concise actionable dry-run summary, got: %s", out)
+	}
+
+	if _, err := os.Lstat(filepath.Join(repo, ".agents", "skills", "sdd-orchestrator", "SKILL.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected no symlink created on dry-run, got err: %v", err)
+	}
+}
+
 func runCLI(repo string, root string, args []string, extraEnv []string) (string, error) {
 	cmd := exec.Command("go", "run", "./cmd/weave")
 	if len(args) > 0 {

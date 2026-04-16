@@ -52,18 +52,18 @@ For every requirement (`R-*`):
 | B3 | P1 | R-PROV-03 | reversible provider operations (remove/repair) | [x] |
 | B3 | P0 | R-DEP-02 | validate provider binaries before success claim | [x] |
 | B3 | P1 | R-DEP-04 | actionable failure messages | [x] |
-| B4 | P0 | R-UX-02 | `doctor` explains status + repair | [ ] |
-| B4 | P0 | R-ARCH-06 | inventory persistence transactional state | [ ] |
-| B4 | P0 | R-ARCH-07 | symlink + config write as single logical transaction | [ ] |
-| B4 | P0 | R-NFR-02 | deterministic exit codes | [ ] |
-| B4 | P1 | R-UX-04 | script-friendly output (`--json`) | [ ] |
-| B4 | P1 | R-POST-03 | errors include docs references | [ ] |
-| B5 | P0 | R-DEP-01 | detect project root + safe scope guard | [ ] |
-| B5 | P0 | R-DEP-03 | `--dry-run` for all mutating commands | [ ] |
-| B5 | P0 | R-DEP-07 | shell-agnostic core CLI commands | [ ] |
-| B5 | P1 | R-UX-01 | concise summary for mutating commands | [ ] |
-| B5 | P1 | R-UX-03 | actionability-first UX language | [ ] |
-| B5 | P1 | R-UX-05 | strict-mode rollback semantics in output | [ ] |
+| B4 | P0 | R-UX-02 | `doctor` explains status + repair | [x] |
+| B4 | P0 | R-ARCH-06 | inventory persistence transactional state | [x] |
+| B4 | P0 | R-ARCH-07 | symlink + config write as single logical transaction | [x] |
+| B4 | P0 | R-NFR-02 | deterministic exit codes | [x] |
+| B4 | P1 | R-UX-04 | script-friendly output (`--json`) | [x] |
+| B4 | P1 | R-POST-03 | errors include docs references | [x] |
+| B5 | P0 | R-DEP-01 | detect project root + safe scope guard | [x] |
+| B5 | P0 | R-DEP-03 | `--dry-run` for all mutating commands | [x] |
+| B5 | P0 | R-DEP-07 | shell-agnostic core CLI commands | [x] |
+| B5 | P1 | R-UX-01 | concise summary for mutating commands | [x] |
+| B5 | P1 | R-UX-03 | actionability-first UX language | [x] |
+| B5 | P1 | R-UX-05 | strict-mode rollback semantics in output | [x] |
 | B6 | P1 | R-SKILL-01 | conflict prompt (overwrite/skip/backup) | [ ] |
 | B6 | P1 | R-SKILL-02 | non-interactive conflict flags | [ ] |
 | B6 | P1 | R-CMD-02 | command metadata provider-compat markers (future-ready) | [ ] |
@@ -397,6 +397,120 @@ Implementation evidence:
 
 ---
 
+## Batch 4 — Doctor + transactional observability + exit semantics
+
+### B4 Exit Criteria
+
+- [x] `doctor` reports project status with actionable repair path.
+- [x] Inventory persistence is treated as transactional state (`weave.yaml` remains the source of truth and drift is diagnosable).
+- [x] In v1 strict mode, symlink operation + config persistence behave as one logical transaction (rollback link on config persistence failure).
+- [x] Exit-code mapping is deterministic for doctor and service error classes.
+- [x] `doctor --json` emits machine-readable diagnostics.
+- [x] Error messages include docs references (path + URL).
+
+### B4 Requirement Traceability Matrix
+
+| Requirement | Unit | Integration | E2E | Acceptance Evidence | Status |
+|-------------|------|-------------|-----|---------------------|--------|
+| R-UX-02 (`doctor` explains status + repair) | B4-T1.1, B4-T1.2 | B4-T1.3 | B4-T1.4 | B4-T1.5 | [x] |
+| R-ARCH-06 (inventory persistence transactional state) | B4-T2.1, B4-T2.2 | B4-T2.3 | B4-T2.4 | B4-T2.5 | [x] |
+| R-ARCH-07 (symlink + config as single logical transaction) | B4-T3.1, B4-T3.2 | B4-T3.3 | B4-T3.4 | B4-T3.5 | [x] |
+| R-NFR-02 (deterministic exit codes) | B4-T4.1, B4-T4.2 | B4-T4.3 | B4-T4.4 | B4-T4.5 | [x] |
+| R-UX-04 (script-friendly `--json`) | B4-T5.1, B4-T5.2 | B4-T5.3 | B4-T5.4 | B4-T5.5 | [x] |
+| R-POST-03 (errors include docs references) | B4-T6.1, B4-T6.2 | B4-T6.3 | B4-T6.4 | B4-T6.5 | [x] |
+
+### B4 Tasks (live checklist)
+
+#### R-UX-02 — `doctor` MUST explain current status and repair path
+
+- [x] **B4-T1.1 Unit (success):** doctor returns `healthy` with empty issues/repair list for converged project state.
+- [x] **B4-T1.2 Unit (edge):** doctor returns issue diagnostics and repair commands when expected symlink is missing.
+- [x] **B4-T1.3 Integration:** CLI `doctor` path maps service result into deterministic status text.
+- [x] **B4-T1.4 E2E:** `weave doctor` on inconsistent state prints issues and suggested repair commands.
+- [x] **B4-T1.5 Evidence:** output contains status (`healthy` or `issues_found`) and explicit repair path (`weave skill add ...` / `weave command add ...`).
+
+Implementation evidence:
+
+- [x] `internal/app/doctor_test.go::TestDoctorService_Run_HealthyProjectReturnsNoIssues`
+- [x] `internal/app/doctor_test.go::TestDoctorService_Run_MissingSkillSymlinkReturnsRepairGuidance`
+- [x] `internal/cli/doctor_test.go::TestRunDoctor_MissingAssetReturnsExitDoctorIssuesAndRepairPath`
+- [x] `test/e2e/doctor_e2e_test.go::TestDoctor_E2E_ReportsIssuesAndDeterministicExitCode`
+
+#### R-ARCH-06 — inventory persistence in `weave.yaml` MUST be transactional state
+
+- [x] **B4-T2.1 Unit (success):** config persistence still succeeds after symlink apply on normal path.
+- [x] **B4-T2.2 Unit (error):** config persistence failure triggers rollback operation for installed link.
+- [x] **B4-T2.3 Integration:** failed persistence leaves no newly installed link and no new `weave.yaml` state.
+- [x] **B4-T2.4 E2E:** doctor can detect inventory/install drift as recoverable state.
+- [x] **B4-T2.5 Evidence:** rollback remove op is executed and missing-link issue becomes observable via diagnostics.
+
+Implementation evidence:
+
+- [x] `internal/app/forge_test.go::TestForgeService_AddAsset_ConfigWriteFailureRollsBackSymlink`
+- [x] `internal/app/asset_add.go` rollback-on-writer-failure flow
+- [x] `test/integration/doctor_integration_test.go::TestDoctor_Integration_ConfigWriteFailureRollsBackSymlinkInStrictMode`
+
+#### R-ARCH-07 — symlink operation + config write MUST behave as one logical transaction in v1 strict mode
+
+- [x] **B4-T3.1 Unit (success):** add flow preserves existing strict ordering (`create_link` then persist config).
+- [x] **B4-T3.2 Unit (error):** add flow compensates with rollback when persistence fails after fs apply.
+- [x] **B4-T3.3 Integration:** strict-mode add failure does not leave partially committed state.
+- [x] **B4-T3.4 E2E:** issue state is deterministic and recoverable through doctor/repair commands.
+- [x] **B4-T3.5 Evidence:** atomic semantic represented by either (a) link+config committed, or (b) neither committed.
+
+Implementation evidence:
+
+- [x] `internal/app/forge_test.go::TestForgeService_AddAsset_PersistsConfigAfterSymlinkSuccess`
+- [x] `internal/app/forge_test.go::TestForgeService_AddAsset_ConfigWriteFailureRollsBackSymlink`
+- [x] `test/integration/doctor_integration_test.go::TestDoctor_Integration_ConfigWriteFailureRollsBackSymlinkInStrictMode`
+
+#### R-NFR-02 — exit codes MUST be deterministic
+
+- [x] **B4-T4.1 Unit (success):** static exit constants include doctor issue class and remain stable.
+- [x] **B4-T4.2 Unit (edge):** error-class mapping function deterministically maps invalid config, missing dependencies, and runtime failures.
+- [x] **B4-T4.3 Integration:** CLI doctor returns stable issue exit code (`5`) without treating issue-reporting as runtime error.
+- [x] **B4-T4.4 E2E:** shell-visible process exit code for doctor issue state is deterministic.
+- [x] **B4-T4.5 Evidence:** repeated failing doctor runs return the same process exit code (`5`).
+
+Implementation evidence:
+
+- [x] `internal/cli/exitcodes_test.go::TestExitCodes_AreStable`
+- [x] `internal/cli/exitcodes_test.go::TestExitCodes_ErrorMappingIsDeterministic`
+- [x] `test/integration/doctor_integration_test.go::TestDoctor_Integration_ExitCodeMappingForIssueState`
+- [x] `test/e2e/doctor_e2e_test.go::TestDoctor_E2E_ReportsIssuesAndDeterministicExitCode`
+
+#### R-UX-04 — relevant commands MUST support script-friendly output (`--json`, at least doctor)
+
+- [x] **B4-T5.1 Unit (success):** `doctor --json` produces valid JSON payload with status/diagnostics schema.
+- [x] **B4-T5.2 Unit (edge):** unknown flags are rejected deterministically.
+- [x] **B4-T5.3 Integration:** doctor CLI printer switches between human text and JSON output deterministically.
+- [x] **B4-T5.4 E2E:** `weave doctor --json` emits parseable JSON for healthy state.
+- [x] **B4-T5.5 Evidence:** JSON includes `status`, `issues`, and `repair_commands` keys.
+
+Implementation evidence:
+
+- [x] `internal/cli/doctor_test.go::TestRunDoctor_JSONOutput`
+- [x] `internal/cli/root.go::runDoctor`
+- [x] `test/e2e/doctor_e2e_test.go::TestDoctor_E2E_JSONOutputIsScriptFriendly`
+
+#### R-POST-03 — errors MUST include docs reference paths/URLs
+
+- [x] **B4-T6.1 Unit (success):** invalid-config wrapper includes docs path + URL in emitted error.
+- [x] **B4-T6.2 Unit (edge):** provider/setup transactional errors include docs references for troubleshooting.
+- [x] **B4-T6.3 Integration:** doctor issue diagnostics include both docs path and canonical docs URL.
+- [x] **B4-T6.4 E2E:** doctor issue output includes docs references in human-readable mode.
+- [x] **B4-T6.5 Evidence:** user-facing errors/diagnostics include `docs/reference/...` and `https://.../docs/...`.
+
+Implementation evidence:
+
+- [x] `internal/app/docs_refs.go`
+- [x] `internal/app/errors.go::WrapInvalidConfig`
+- [x] `internal/app/provider_service.go` error paths
+- [x] `internal/app/doctor_test.go::TestDoctorService_Run_MissingSkillSymlinkReturnsRepairGuidance`
+- [x] `test/e2e/doctor_e2e_test.go::TestDoctor_E2E_ReportsIssuesAndDeterministicExitCode`
+
+---
+
 ## Progress Log
 
 - [x] Batch 1 started
@@ -405,14 +519,125 @@ Implementation evidence:
 - [x] Batch 2 completed
 - [x] Batch 3 started
 - [x] Batch 3 completed
-- [ ] Batch 4 started
-- [ ] Batch 4 completed
-- [ ] Batch 5 started
-- [ ] Batch 5 completed
+- [x] Batch 4 started
+- [x] Batch 4 completed
+- [x] Batch 5 started
+- [x] Batch 5 completed
 - [ ] Batch 6 started
 - [ ] Batch 6 completed
 - [ ] Batch 7 started
 - [ ] Batch 7 completed
+
+---
+
+## Batch 5 — Safety guards + dry-run + shell-agnostic behavior
+
+### B5 Exit Criteria
+
+- [x] CLI detects project root from nested working directories and rejects mutating runs outside repository scope.
+- [x] All mutating commands support deterministic `--dry-run` behavior without filesystem/config mutation.
+- [x] Mutating command summaries are concise, actionable, and consistent across shell invocation styles.
+- [x] Strict-mode rollback output explicitly states whether rollback completed or partial state remains.
+
+### B5 Requirement Traceability Matrix
+
+| Requirement | Unit | Integration | E2E | Acceptance Evidence | Status |
+|-------------|------|-------------|-----|---------------------|--------|
+| R-DEP-01 (detect project root + safe scope guard) | B5-T1.1, B5-T1.2 | B5-T1.3 | B5-T1.4 | B5-T1.5 | [x] |
+| R-DEP-03 (`--dry-run` for mutating commands) | B5-T2.1, B5-T2.2 | B5-T2.3 | B5-T2.4 | B5-T2.5 | [x] |
+| R-DEP-07 (shell-agnostic core CLI commands) | B5-T3.1, B5-T3.2 | B5-T3.3 | B5-T3.4 | B5-T3.5 | [x] |
+| R-UX-01 (concise summary for mutating commands) | B5-T4.1, B5-T4.2 | B5-T4.3 | B5-T4.4 | B5-T4.5 | [x] |
+| R-UX-03 (actionability-first UX language) | B5-T5.1, B5-T5.2 | B5-T5.3 | B5-T5.4 | B5-T5.5 | [x] |
+| R-UX-05 (strict-mode rollback semantics in output) | B5-T6.1, B5-T6.2 | B5-T6.3 | B5-T6.4 | B5-T6.5 | [x] |
+
+### B5 Tasks (live checklist)
+
+#### R-DEP-01 — detect project root + safe scope guard
+
+- [x] **B5-T1.1 Unit (success):** root detector resolves repository root from nested workdir.
+- [x] **B5-T1.2 Unit (edge):** mutation guard rejects fs operations outside detected project root.
+- [x] **B5-T1.3 Integration:** service-layer mutating flows enforce root-scoped operation guards before apply.
+- [x] **B5-T1.4 E2E:** mutating commands run from nested contexts still operate on repository root.
+- [x] **B5-T1.5 Evidence:** deterministic `ErrUnsafeMutationPath` on out-of-root operation plans.
+
+Implementation evidence:
+
+- [x] `internal/cli/forge_handler.go::detectProjectRootFrom`
+- [x] `internal/app/mutation_guard.go`
+- [x] `internal/app/mutation_guard_test.go::TestEnsureOpsWithinRoot_RejectsPathOutsideRoot`
+- [x] `internal/app/forge_test.go::TestForgeService_Run_RejectsOpsOutsideDetectedRoot`
+
+#### R-DEP-03 — `--dry-run` for all mutating commands
+
+- [x] **B5-T2.1 Unit (success):** forge/asset/provider services return planned operation counts in dry-run without apply/write.
+- [x] **B5-T2.2 Unit (edge):** dry-run parsing rejects unsupported combinations (e.g. `provider list --dry-run`).
+- [x] **B5-T2.3 Integration:** dry-run mode preserves existing `weave.yaml` bytes and does not create symlinks/projection dirs.
+- [x] **B5-T2.4 E2E:** `forge`, `skill add`, and `provider add` dry-runs emit success exit code with no mutations.
+- [x] **B5-T2.5 Evidence:** pre/post filesystem + config snapshots remain unchanged under dry-run.
+
+Implementation evidence:
+
+- [x] `internal/app/forge.go::RunWithOptions`
+- [x] `internal/app/asset_add.go::AddAssetWithOptions`
+- [x] `internal/app/provider_service.go::*WithOptions`
+- [x] `internal/cli/root.go::parseDryRunOnly|parseAddFlags|parseProviderAction`
+- [x] `test/e2e/forge_e2e_test.go::TestForge_E2E_DryRunDoesNotMutateAndPrintsActionableSummary`
+- [x] `test/e2e/provider_e2e_test.go::TestProviderAdd_E2E_DryRunDoesNotMutateAndPrintsActionableSummary`
+
+#### R-DEP-07 — shell-agnostic core CLI commands
+
+- [x] **B5-T3.1 Unit (success):** argument parsing accepts explicit flag/value and equals forms deterministically.
+- [x] **B5-T3.2 Unit (edge):** unsupported flags/extra args fail with deterministic parsing errors.
+- [x] **B5-T3.3 Integration:** command dispatch remains independent of shell-specific wrappers/aliases.
+- [x] **B5-T3.4 E2E:** command behavior is stable across `go run ./cmd/weave <args>` entrypoints.
+- [x] **B5-T3.5 Evidence:** repeated invocations with equivalent args produce identical summaries and state transitions.
+
+Implementation evidence:
+
+- [x] `internal/cli/root_test.go::TestParseProviderAction_AddParsesDryRun`
+- [x] `internal/cli/root_test.go::TestParseDryRunOnly_RejectsUnknownFlag`
+- [x] `test/e2e/forge_e2e_test.go` dry-run + precedence flows
+
+#### R-UX-01 — concise summary for mutating commands
+
+- [x] **B5-T4.1 Unit (success):** forge summary reports applied/planned counts in one concise line.
+- [x] **B5-T4.2 Unit (edge):** no-op and dry-run variants produce concise summary text.
+- [x] **B5-T4.3 Integration:** provider and asset commands print deterministic concise summaries after successful execution.
+- [x] **B5-T4.4 E2E:** mutating command output includes single-line concise status summaries.
+- [x] **B5-T4.5 Evidence:** output assertions match concise summary prefixes (`forge:`, `skill add`, `provider added`).
+
+Implementation evidence:
+
+- [x] `internal/cli/root.go::printForgeSummary`
+- [x] `internal/cli/root.go::printAssetAddSummary`
+- [x] `internal/cli/root.go::printProviderSummary`
+
+#### R-UX-03 — actionability-first UX language
+
+- [x] **B5-T5.1 Unit (success):** dry-run summaries include explicit next step (`rerun without --dry-run`).
+- [x] **B5-T5.2 Unit (edge):** argument/flag errors identify exactly what to change.
+- [x] **B5-T5.3 Integration:** transactional/provider failure messages preserve repair command guidance.
+- [x] **B5-T5.4 E2E:** user-facing dry-run and failure outputs include actionable next commands.
+- [x] **B5-T5.5 Evidence:** assertions verify guidance text in CLI output.
+
+Implementation evidence:
+
+- [x] `internal/cli/root.go` summary strings
+- [x] `internal/cli/root_test.go` parsing failure tests
+- [x] `test/e2e/forge_e2e_test.go::TestSkillAdd_E2E_DryRunDoesNotMutateAndPrintsActionableSummary`
+
+#### R-UX-05 — strict-mode rollback semantics in output
+
+- [x] **B5-T6.1 Unit (success):** rollback-complete errors explicitly state no config/symlink changes were committed.
+- [x] **B5-T6.2 Unit (edge):** rollback-failure errors explicitly warn about possible partial state and immediate repair path.
+- [x] **B5-T6.3 Integration:** rollback semantics surface from service boundary to CLI stderr unchanged.
+- [x] **B5-T6.4 E2E:** strict rollback failure output remains actionable and deterministic.
+- [x] **B5-T6.5 Evidence:** output includes semantic markers (`rollback completed` or `project may be partially modified`).
+
+Implementation evidence:
+
+- [x] `internal/app/asset_add.go` rollback error messaging
+- [x] `internal/app/forge_test.go::TestForgeService_AddAsset_ConfigWriteFailureRollsBackSymlink`
 
 ---
 
