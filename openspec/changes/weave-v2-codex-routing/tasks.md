@@ -126,7 +126,7 @@ Implementation evidence:
   - `python3 -m unittest scripts/release/release_artifacts_test.py scripts/release/check_migration_gate_test.py`
   - Result: `Ran 7 tests ... OK`
 - Local unit test evidence (guided git-init flow):
-  - `go test ./internal/cli -run 'TestProjectRootDetector_(FailsWhenNoGitAncestorExists|InteractivePromptDeclinedFails|InteractivePromptAcceptedRunsGitInit|InteractivePromptAcceptedGitInitFails)'`
+  - `go test ./internal/cli -run 'TestProjectRootDetector_(FailsWhenNoGitAncestorExists|InteractivePromptDeclinedFails|InteractivePromptAcceptedRunsGitInit|InteractivePromptAcceptedGitInitFails)|TestDefaultIsInteractiveSession_(RespectsNonInteractiveEnvOverride|ForceInteractiveOverrideWins)'`
   - Result: `ok github.com/Jfgm299/weave-cli/internal/cli`
 - Local e2e test definition added for non-interactive root-detection behavior:
   - `test/e2e/git_init_guidance_e2e_test.go::TestForge_E2E_NoGitRoot_NonInteractiveShowsActionableGuidance`
@@ -139,16 +139,13 @@ Implementation evidence:
 
 ### B0 CI Run URLs
 
-- T1.4/T1.5 — `release-artifacts.yml` workflow_dispatch run (failure path before key-policy fix): https://github.com/Jfgm299/weave-cli/actions/runs/24534428611
-- T1.4/T1.5 — `install-artifact-validation.yml` push run (success): https://github.com/Jfgm299/weave-cli/actions/runs/24534393193
-- T2.4/T2.5 — `migration-note-gate.yml` pull_request run (success): https://github.com/Jfgm299/weave-cli/actions/runs/24534384197
-
-### B0 CI Run URLs (fill to close Batch 0)
-
-- T1.4/T1.5 — `release-artifacts.yml` run URL: _pending_
-- T1.4/T1.5 — `install-artifact-validation.yml` run URL: _pending_
-- T2.4/T2.5 — `migration-note-gate.yml` run URL: _pending_
-- T3.5 — interactive git-init e2e evidence (command output/log link): _pending_
+- T1.4/T1.5 — `release-artifacts.yml` workflow_dispatch run (initial failure before key-policy fix): https://github.com/Jfgm299/weave-cli/actions/runs/24534428611
+- T1.4/T1.5 — `release-artifacts.yml` workflow_dispatch run (success after policy fix): https://github.com/Jfgm299/weave-cli/actions/runs/24534779007
+- T1.4/T1.5 — `install-artifact-validation.yml` push run (success): https://github.com/Jfgm299/weave-cli/actions/runs/24534774609
+- T2.4/T2.5 — `migration-note-gate.yml` pull_request run (success): https://github.com/Jfgm299/weave-cli/actions/runs/24534770308
+- T3.5 — interactive git-init e2e evidence (local command + output):
+  - `go test -tags=e2e ./test/e2e -run TestForge_E2E_NoGitRoot_ForcedInteractiveDeclineShowsDeclinedGuidance`
+  - Result: `ok github.com/Jfgm299/weave-cli/test/e2e`
 
 ---
 
