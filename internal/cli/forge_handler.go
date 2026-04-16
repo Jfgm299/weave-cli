@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +13,10 @@ import (
 
 type ForgeHandler struct {
 	Service app.ForgeService
+}
+
+type ForgeRunResult struct {
+	ServiceResult app.ForgeResult
 }
 
 func NewDefaultForgeHandler() ForgeHandler {
@@ -32,23 +35,24 @@ func NewDefaultForgeHandler() ForgeHandler {
 }
 
 func (h ForgeHandler) Run(ctx context.Context) (int, error) {
+	code, _, err := h.RunWithOptions(ctx, false)
+	return code, err
+}
+
+func (h ForgeHandler) RunWithOptions(ctx context.Context, dryRun bool) (int, ForgeRunResult, error) {
 	workdir := resolveWorkdir()
 	loader := config.FileLoader{Path: filepath.Join(workdir, "weave.yaml")}
 	cfg, err := loader.LoadOrDefault()
 	if err != nil {
-		return ExitInvalidConfig, err
+		return ExitInvalidConfig, ForgeRunResult{}, err
 	}
 
-	result, err := h.Service.Run(ctx, cfg)
+	result, err := h.Service.RunWithOptions(ctx, cfg, app.RunOptions{DryRun: dryRun})
 	if err != nil {
-		if errors.Is(err, app.ErrInvalidConfig) {
-			return ExitInvalidConfig, err
-		}
-		return ExitRuntimeError, err
+		return exitCodeForError(err), ForgeRunResult{}, err
 	}
 
-	_ = result
-	return ExitOK, nil
+	return ExitOK, ForgeRunResult{ServiceResult: result}, nil
 }
 
 type projectRootDetector struct {
@@ -60,10 +64,11 @@ func (d projectRootDetector) Detect(_ context.Context) (string, error) {
 	if workdir == "" {
 		workdir = resolveWorkdir()
 	}
-	if _, err := os.Stat(filepath.Join(workdir, ".git")); err != nil {
+	root, err := detectProjectRootFrom(workdir)
+	if err != nil {
 		return "", fmt.Errorf("project root not detected: %w", err)
 	}
-	return workdir, nil
+	return root, nil
 }
 
 type forgePlanner struct {
@@ -79,13 +84,17 @@ func (p forgePlanner) Plan(cfg config.Config) ([]fsops.Operation, error) {
 	if workdir == "" {
 		workdir = resolveWorkdir()
 	}
+	root, err := detectProjectRootFrom(workdir)
+	if err != nil {
+		return nil, fmt.Errorf("project root not detected: %w", err)
+	}
 
-	candidates := []string{filepath.Join(workdir, ".agents/skills"), filepath.Join(workdir, ".agents/commands"), filepath.Join(workdir, ".agents/docs")}
+	candidates := []string{filepath.Join(root, ".agents/skills"), filepath.Join(root, ".agents/commands"), filepath.Join(root, ".agents/docs")}
 	ops := make([]fsops.Operation, 0, len(candidates))
 	for _, path := range candidates {
 		if _, err := os.Stat(path); err == nil {
 			continue
-		} else if !errors.Is(err, os.ErrNotExist) {
+		} else if !os.IsNotExist(err) {
 			return nil, fmt.Errorf("cannot inspect %s: %w", path, err)
 		}
 		ops = append(ops, fsops.Operation{Type: fsops.OpEnsureDir, Path: path})
@@ -96,11 +105,37 @@ func (p forgePlanner) Plan(cfg config.Config) ([]fsops.Operation, error) {
 
 func resolveWorkdir() string {
 	if wd := os.Getenv("WEAVE_WORKDIR"); wd != "" {
+		if root, err := detectProjectRootFrom(wd); err == nil {
+			return root
+		}
 		return wd
 	}
 	wd, err := os.Getwd()
 	if err != nil {
 		return "."
 	}
+	if root, err := detectProjectRootFrom(wd); err == nil {
+		return root
+	}
 	return wd
+}
+
+func detectProjectRootFrom(start string) (string, error) {
+	current, err := filepath.Abs(start)
+	if err != nil {
+		return "", err
+	}
+
+	for {
+		gitPath := filepath.Join(current, ".git")
+		if _, err := os.Stat(gitPath); err == nil {
+			return current, nil
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", os.ErrNotExist
+		}
+		current = parent
+	}
 }

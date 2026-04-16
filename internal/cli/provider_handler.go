@@ -42,41 +42,41 @@ func newProviderService(workdir string, resolver app.BinaryResolver) app.Provide
 	}
 }
 
-func runProviderAction(ctx context.Context, svc app.ProviderService, registry providers.Registry, action providerAction, name string) ([]string, error) {
+func runProviderAction(ctx context.Context, svc app.ProviderService, registry providers.Registry, action providerAction, name string, dryRun bool) (app.ProviderAddResult, []string, error) {
 	workdir := resolveWorkdir()
 	loader := config.FileLoader{Path: filepath.Join(workdir, "weave.yaml")}
 	cfg, err := loader.LoadOrDefault()
 	if err != nil {
-		return nil, err
+		return app.ProviderAddResult{}, nil, err
 	}
 
 	switch action {
 	case providerActionAdd:
 		if name == "" {
-			return nil, fmt.Errorf("provider name is required")
+			return app.ProviderAddResult{}, nil, fmt.Errorf("provider name is required")
 		}
-		_, err := svc.AddProvider(ctx, cfg, registry, name)
-		return nil, err
+		res, err := svc.AddProviderWithOptions(ctx, cfg, registry, name, app.RunOptions{DryRun: dryRun})
+		return res, nil, err
 	case providerActionRemove:
 		if name == "" {
-			return nil, fmt.Errorf("provider name is required")
+			return app.ProviderAddResult{}, nil, fmt.Errorf("provider name is required")
 		}
-		_, err := svc.RemoveProvider(ctx, cfg, registry, name)
-		return nil, err
+		res, err := svc.RemoveProviderWithOptions(ctx, cfg, registry, name, app.RunOptions{DryRun: dryRun})
+		return res, nil, err
 	case providerActionRepair:
 		if name == "" {
-			return nil, fmt.Errorf("provider name is required")
+			return app.ProviderAddResult{}, nil, fmt.Errorf("provider name is required")
 		}
-		_, err := svc.RepairProvider(ctx, cfg, registry, name)
-		return nil, err
+		res, err := svc.RepairProviderWithOptions(ctx, cfg, registry, name, app.RunOptions{DryRun: dryRun})
+		return res, nil, err
 	case providerActionList:
 		enabled := app.ListEnabledProviders(cfg)
 		names := make([]string, 0, len(enabled))
 		for _, p := range enabled {
 			names = append(names, p.Name)
 		}
-		return names, nil
+		return app.ProviderAddResult{}, names, nil
 	default:
-		return nil, fmt.Errorf("unsupported provider action: %s", action)
+		return app.ProviderAddResult{}, nil, fmt.Errorf("unsupported provider action: %s", action)
 	}
 }

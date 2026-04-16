@@ -41,9 +41,18 @@ type ForgeResult struct {
 	OpsApplied  int
 	WasNoOp     bool
 	ConfigSaved bool
+	DryRun      bool
 }
 
 func (s ForgeService) Run(ctx context.Context, cfg config.Config) (ForgeResult, error) {
+	return s.RunWithOptions(ctx, cfg, RunOptions{})
+}
+
+type RunOptions struct {
+	DryRun bool
+}
+
+func (s ForgeService) RunWithOptions(ctx context.Context, cfg config.Config, opts RunOptions) (ForgeResult, error) {
 	root, err := s.ProjectRootDetector.Detect(ctx)
 	if err != nil {
 		return ForgeResult{}, ErrNotInProjectRoot
@@ -58,7 +67,15 @@ func (s ForgeService) Run(ctx context.Context, cfg config.Config) (ForgeResult, 
 		return ForgeResult{}, err
 	}
 
-	result := ForgeResult{Root: root, OpsPlanned: len(ops), WasNoOp: len(ops) == 0}
+	if err := ensureOpsWithinRoot(root, ops); err != nil {
+		return ForgeResult{}, err
+	}
+
+	result := ForgeResult{Root: root, OpsPlanned: len(ops), WasNoOp: len(ops) == 0, DryRun: opts.DryRun}
+
+	if opts.DryRun {
+		return result, nil
+	}
 
 	if len(ops) > 0 {
 		if err := s.Executor.Apply(ctx, ops); err != nil {

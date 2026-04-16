@@ -16,7 +16,7 @@ type assetAddService struct {
 	Workdir  string
 }
 
-func (s assetAddService) Add(ctx context.Context, kind assetKind, name string, fromFlag string, cfg config.Config) (app.AddAssetResult, error) {
+func (s assetAddService) Add(ctx context.Context, kind assetKind, name string, fromFlag string, dryRun bool, cfg config.Config) (app.AddAssetResult, error) {
 	root := s.Workdir
 	if root == "" {
 		root = resolveWorkdir()
@@ -34,7 +34,7 @@ func (s assetAddService) Add(ctx context.Context, kind assetKind, name string, f
 		ProjectPath: assetPathFor(kind, root, name),
 	}
 
-	return s.Service.AddAsset(ctx, cfg, input)
+	return s.Service.AddAssetWithOptions(ctx, cfg, input, app.RunOptions{DryRun: dryRun})
 }
 
 func mapKind(kind assetKind) app.AssetKind {

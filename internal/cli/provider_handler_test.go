@@ -27,7 +27,7 @@ func TestProviderRunAction_Add_UpdatesConfigWithEnabledProvider(t *testing.T) {
 		return "/usr/local/bin/" + bin, nil
 	}))
 
-	if _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionAdd, "claude-code"); err != nil {
+	if _, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionAdd, "claude-code", false); err != nil {
 		t.Fatalf("provider add failed: %v", err)
 	}
 
@@ -52,7 +52,7 @@ func TestProviderRunAction_Add_MissingBinaryReturnsActionableMessage(t *testing.
 		return "", os.ErrNotExist
 	}))
 
-	_, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionAdd, "claude-code")
+	_, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionAdd, "claude-code", false)
 	if err == nil {
 		t.Fatalf("expected provider add to fail when binary is missing")
 	}
@@ -79,7 +79,7 @@ func TestProviderRunAction_List_ReturnsSortedEnabledProviders(t *testing.T) {
 		return "/usr/local/bin/" + bin, nil
 	}))
 
-	names, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionList, "")
+	_, names, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionList, "", false)
 	if err != nil {
 		t.Fatalf("provider list failed: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestProviderRunAction_Remove_DeletesProjectionAndConfigEntry(t *testing.T) 
 		return "/usr/local/bin/" + bin, nil
 	}))
 
-	if _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionRemove, "claude-code"); err != nil {
+	if _, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionRemove, "claude-code", false); err != nil {
 		t.Fatalf("provider remove failed: %v", err)
 	}
 
@@ -124,5 +124,106 @@ func TestProviderRunAction_Remove_DeletesProjectionAndConfigEntry(t *testing.T) 
 
 	if _, err := os.Stat(filepath.Join(repo, ".claude")); !os.IsNotExist(err) {
 		t.Fatalf("expected .claude directory removed, got err: %v", err)
+	}
+}
+
+func TestProviderRunAction_Add_DryRunDoesNotMutateConfig(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("WEAVE_WORKDIR", repo)
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	seed := []byte("version: 1\nproviders: []\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: ~/.weave/commands\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("seed weave.yaml: %v", err)
+	}
+
+	svc := newProviderService(repo, providerBinaryResolverFunc(func(bin string) (string, error) {
+		return "/usr/local/bin/" + bin, nil
+	}))
+
+	result, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionAdd, "claude-code", true)
+	if err != nil {
+		t.Fatalf("provider add dry-run failed: %v", err)
+	}
+
+	if !result.DryRun {
+		t.Fatalf("expected dry-run result")
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml unchanged during dry-run")
+	}
+}
+
+func TestProviderRunAction_RemoveDryRun_DoesNotMutateConfig(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("WEAVE_WORKDIR", repo)
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	seed := []byte("version: 1\nproviders:\n  - name: claude-code\n    enabled: true\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: ~/.weave/commands\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("seed weave.yaml: %v", err)
+	}
+
+	svc := newProviderService(repo, providerBinaryResolverFunc(func(bin string) (string, error) {
+		return "/usr/local/bin/" + bin, nil
+	}))
+
+	result, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionRemove, "claude-code", true)
+	if err != nil {
+		t.Fatalf("provider remove dry-run failed: %v", err)
+	}
+	if !result.DryRun {
+		t.Fatalf("expected dry-run result")
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml unchanged during remove dry-run")
+	}
+}
+
+func TestProviderRunAction_RepairDryRun_DoesNotMutateConfig(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("WEAVE_WORKDIR", repo)
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	seed := []byte("version: 1\nproviders:\n  - name: claude-code\n    enabled: false\nsources:\n  skills_dir: ~/.weave/skills\n  commands_dir: ~/.weave/commands\nsync:\n  mode: symlink\nskills: []\ncommands: []\n")
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), seed, 0o644); err != nil {
+		t.Fatalf("seed weave.yaml: %v", err)
+	}
+
+	svc := newProviderService(repo, providerBinaryResolverFunc(func(bin string) (string, error) {
+		return "/usr/local/bin/" + bin, nil
+	}))
+
+	result, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionRepair, "claude-code", true)
+	if err != nil {
+		t.Fatalf("provider repair dry-run failed: %v", err)
+	}
+	if !result.DryRun {
+		t.Fatalf("expected dry-run result")
+	}
+
+	after, err := os.ReadFile(filepath.Join(repo, "weave.yaml"))
+	if err != nil {
+		t.Fatalf("read weave.yaml: %v", err)
+	}
+	if string(after) != string(seed) {
+		t.Fatalf("expected weave.yaml unchanged during repair dry-run")
 	}
 }

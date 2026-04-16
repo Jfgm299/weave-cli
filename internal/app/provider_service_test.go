@@ -106,6 +106,10 @@ func TestProviderService_AddProvider_MissingBinaryReturnsActionableError(t *test
 		t.Fatalf("expected actionable missing binary message, got %q", msg)
 	}
 
+	if !strings.Contains(msg, DocsPathProviders) || !strings.Contains(msg, DocsURL(DocsPathProviders)) {
+		t.Fatalf("expected docs references in missing binary message, got %q", msg)
+	}
+
 	if executor.called {
 		t.Fatalf("expected fs executor not called when prerequisites are missing")
 	}
@@ -138,6 +142,83 @@ func TestProviderService_AddProvider_UnsupportedProviderReturnsSupportedList(t *
 
 	if !strings.Contains(err.Error(), "Supported providers: claude-code, opencode") {
 		t.Fatalf("expected actionable supported providers message, got %q", err.Error())
+	}
+
+	if !strings.Contains(err.Error(), DocsPathProviders) || !strings.Contains(err.Error(), DocsURL(DocsPathProviders)) {
+		t.Fatalf("expected docs references in unsupported provider error, got %q", err.Error())
+	}
+}
+
+func TestProviderService_AddProvider_DryRunDoesNotApplyOrPersist(t *testing.T) {
+	t.Parallel()
+
+	executor := &providerExecutorSpy{}
+	writer := &providerWriterSpy{}
+
+	sut := ProviderService{
+		ProjectRootDetector: detectorStub{root: "/tmp/proj"},
+		ConfigValidator:     validatorStub{},
+		Executor:            executor,
+		Writer:              writer,
+		BinaryResolver: providerBinaryResolverStub{paths: map[string]string{
+			"claude": "/bin/claude",
+		}},
+	}
+
+	registry := providerRegistryStub{adapters: map[string]ProviderAdapter{
+		"claude-code": providerAdapterStub{
+			name:             "claude-code",
+			requiredBinaries: []string{"claude"},
+			setupOps:         []fsops.Operation{{Type: fsops.OpCreateLink, Path: "/tmp/proj/.claude/CLAUDE.md", Target: "../.agents/AGENTS.md"}},
+		},
+	}}
+
+	result, err := sut.AddProviderWithOptions(context.Background(), config.Default(), registry, "claude-code", RunOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("unexpected dry-run error: %v", err)
+	}
+
+	if !result.DryRun {
+		t.Fatalf("expected dry-run result")
+	}
+
+	if executor.called {
+		t.Fatalf("executor should not run during dry-run")
+	}
+
+	if writer.called {
+		t.Fatalf("writer should not run during dry-run")
+	}
+}
+
+func TestProviderService_AddProvider_RejectsOpsOutsideRoot(t *testing.T) {
+	t.Parallel()
+
+	sut := ProviderService{
+		ProjectRootDetector: detectorStub{root: "/tmp/proj"},
+		ConfigValidator:     validatorStub{},
+		Executor:            &providerExecutorSpy{},
+		Writer:              &providerWriterSpy{},
+		BinaryResolver: providerBinaryResolverStub{paths: map[string]string{
+			"claude": "/bin/claude",
+		}},
+	}
+
+	registry := providerRegistryStub{adapters: map[string]ProviderAdapter{
+		"claude-code": providerAdapterStub{
+			name:             "claude-code",
+			requiredBinaries: []string{"claude"},
+			setupOps:         []fsops.Operation{{Type: fsops.OpCreateLink, Path: "/tmp/other/.claude/CLAUDE.md", Target: "../.agents/AGENTS.md"}},
+		},
+	}}
+
+	_, err := sut.AddProvider(context.Background(), config.Default(), registry, "claude-code")
+	if err == nil {
+		t.Fatalf("expected unsafe path guard error")
+	}
+
+	if !errors.Is(err, ErrUnsafeMutationPath) {
+		t.Fatalf("expected ErrUnsafeMutationPath, got %v", err)
 	}
 }
 
