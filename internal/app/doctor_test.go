@@ -127,6 +127,86 @@ func TestDoctorService_Run_UnknownEnabledProviderFlagsStaleIntegration(t *testin
 	}
 }
 
+func TestDoctorService_Run_CommandSharedInstallMissingSymlinkHasCommandRepairGuidance(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	cmdSource := filepath.Join(repo, "shared", "commands", "pr-review.md")
+	if err := os.MkdirAll(filepath.Dir(cmdSource), 0o755); err != nil {
+		t.Fatalf("mkdir command source: %v", err)
+	}
+	if err := os.WriteFile(cmdSource, []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	shared := true
+	result, err := (DoctorService{}).Run(context.Background(), repo, config.Config{
+		Version: 1,
+		Sync:    config.Sync{Mode: "symlink"},
+		Commands: []config.Asset{{
+			Name:   "pr-review",
+			Source: cmdSource,
+			Meta: &config.CommandMetaV1{
+				ProviderCompat: []string{"claude-code", "codex", "opencode"},
+				SharedInstall:  &shared,
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected doctor error: %v", err)
+	}
+
+	if result.Status != DoctorStatusIssuesFound {
+		t.Fatalf("expected issues status, got %q", result.Status)
+	}
+	if len(result.RepairCommands) == 0 || result.RepairCommands[0] != "weave command add pr-review" {
+		t.Fatalf("expected shared command repair guidance, got %+v", result.RepairCommands)
+	}
+}
+
+func TestDoctorService_Run_CommandExclusiveProjectionMissingUsesProviderSpecificRepair(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	cmdSource := filepath.Join(repo, "shared", "commands", "pr-review.md")
+	if err := os.MkdirAll(filepath.Dir(cmdSource), 0o755); err != nil {
+		t.Fatalf("mkdir command source: %v", err)
+	}
+	if err := os.WriteFile(cmdSource, []byte("# command"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	shared := false
+	result, err := (DoctorService{}).Run(context.Background(), repo, config.Config{
+		Version: 1,
+		Sync:    config.Sync{Mode: "symlink"},
+		Commands: []config.Asset{{
+			Name:   "pr-review",
+			Source: cmdSource,
+			Meta: &config.CommandMetaV1{
+				ProviderCompat: []string{"codex"},
+				SharedInstall:  &shared,
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected doctor error: %v", err)
+	}
+
+	foundProjectionIssue := false
+	for _, issue := range result.Issues {
+		if issue.Code == "stale_command_projection" {
+			foundProjectionIssue = true
+			if issue.RepairCommand != "weave command add pr-review --provider codex" {
+				t.Fatalf("expected provider-specific repair command, got %q", issue.RepairCommand)
+			}
+		}
+	}
+	if !foundProjectionIssue {
+		t.Fatalf("expected stale_command_projection issue, got %+v", result.Issues)
+	}
+}
+
 type doctorRegistryStub struct{}
 
 func (doctorRegistryStub) Get(name string) (ProviderAdapter, bool) {
