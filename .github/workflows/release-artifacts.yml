@@ -23,7 +23,7 @@ jobs:
       - name: Generate release artifacts and signed checksums
         env:
           WEAVE_VERSION: ${{ github.ref_name }}
-          REQUIRE_SIGNING_KEY: "1"
+          REQUIRE_SIGNING_KEY: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
           WEAVE_SIGNING_PRIVATE_KEY: ${{ secrets.WEAVE_SIGNING_PRIVATE_KEY }}
         run: |
           bash scripts/release/generate_artifacts.sh

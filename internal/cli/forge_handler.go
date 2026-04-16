@@ -105,6 +105,9 @@ func defaultIsInteractiveSession() bool {
 	if os.Getenv("WEAVE_NON_INTERACTIVE") == "1" {
 		return false
 	}
+	if os.Getenv("WEAVE_FORCE_INTERACTIVE") == "1" {
+		return true
+	}
 	stdinInfo, stdinErr := os.Stdin.Stat()
 	stdoutInfo, stdoutErr := os.Stdout.Stat()
 	if stdinErr != nil || stdoutErr != nil {

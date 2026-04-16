@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -352,7 +353,19 @@ func runCLI(repo string, root string, args []string, extraEnv []string) (string,
 	}
 	cmd.Dir = root
 	baseEnv := append(os.Environ(), "WEAVE_WORKDIR="+repo)
-	cmd.Env = append(baseEnv, extraEnv...)
+	filteredEnv := make([]string, 0, len(extraEnv))
+	stdinPayload := ""
+	for _, kv := range extraEnv {
+		if strings.HasPrefix(kv, "WEAVE_TEST_STDIN=") {
+			stdinPayload = strings.TrimPrefix(kv, "WEAVE_TEST_STDIN=")
+			continue
+		}
+		filteredEnv = append(filteredEnv, kv)
+	}
+	cmd.Env = append(baseEnv, filteredEnv...)
+	if stdinPayload != "" {
+		cmd.Stdin = bytes.NewBufferString(stdinPayload)
+	}
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
