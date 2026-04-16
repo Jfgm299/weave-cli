@@ -16,6 +16,22 @@ What it does:
 2. Runs `go mod tidy` and `go mod download`.
 3. Runs `go test ./...` to validate the environment.
 
+## One-command install (Weave binary)
+
+Run:
+
+```sh
+./scripts/install.sh
+```
+
+Then verify installation:
+
+```sh
+weave --version
+weave forge
+weave doctor
+```
+
 ## Manual test command
 
 ```sh
