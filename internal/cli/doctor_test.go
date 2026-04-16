@@ -186,6 +186,58 @@ func TestRunDoctor_StaleProviderIntegrationIsReported(t *testing.T) {
 	}
 }
 
+func TestRunDoctor_CommandExclusiveProjectionMissingShowsProviderRepairGuidance(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	cmdSource := filepath.Join(repo, "shared", "commands", "pr-review.md")
+	if err := os.MkdirAll(filepath.Dir(cmdSource), 0o755); err != nil {
+		t.Fatalf("mkdir source dir: %v", err)
+	}
+	if err := os.WriteFile(cmdSource, []byte("# cmd"), 0o644); err != nil {
+		t.Fatalf("write source command: %v", err)
+	}
+
+	configBody := "version: 1\n" +
+		"sources:\n" +
+		"  skills_dir: ~/.weave/skills\n" +
+		"  commands_dir: ~/.weave/commands\n" +
+		"sync:\n" +
+		"  mode: symlink\n" +
+		"skills: []\n" +
+		"commands:\n" +
+		"  - name: pr-review\n" +
+		"    source: " + cmdSource + "\n" +
+		"    metadata:\n" +
+		"      provider_compat:\n" +
+		"        - codex\n" +
+		"      shared_install: false\n"
+
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), []byte(configBody), 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	t.Setenv("WEAVE_WORKDIR", repo)
+	out := captureStdout(t, func() {
+		code, err := runDoctor(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("unexpected runDoctor error: %v", err)
+		}
+		if code != ExitDoctorIssues {
+			t.Fatalf("expected ExitDoctorIssues for stale command projection, got %d", code)
+		}
+	})
+
+	if !strings.Contains(out, "stale_command_projection") {
+		t.Fatalf("expected stale command projection issue in doctor output, got: %s", out)
+	}
+	if !strings.Contains(out, "weave command add pr-review --provider codex") {
+		t.Fatalf("expected provider-specific command repair guidance, got: %s", out)
+	}
+}
+
 func TestRunDoctor_RejectsUnknownFlagDeterministically(t *testing.T) {
 	repo := t.TempDir()
 	t.Setenv("WEAVE_WORKDIR", repo)

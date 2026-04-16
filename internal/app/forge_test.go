@@ -470,6 +470,122 @@ func TestForgeService_AddAsset_ConflictSkipPolicyReturnsWithoutWrites(t *testing
 	}
 }
 
+func TestForgeService_AddAsset_WithAdditionalOperations_AppliesAllAndPersistsConfig(t *testing.T) {
+	t.Parallel()
+
+	executor := &executorSpy{}
+	writer := &writerSpy{}
+
+	sut := ForgeService{
+		ProjectRootDetector: detectorStub{root: "/tmp/proj"},
+		ConfigValidator:     validatorStub{},
+		Executor:            executor,
+		Writer:              writer,
+	}
+
+	_, err := sut.AddAsset(context.Background(), config.Default(), AddAssetInput{
+		Kind:        AssetKindCommand,
+		Name:        "pr-review",
+		SourcePath:  "/tmp/proj/src/commands/pr-review.md",
+		ProjectPath: "/tmp/proj/.agents/commands/pr-review.md",
+		AdditionalOps: []fsops.Operation{{
+			Type:   fsops.OpCreateLink,
+			Path:   "/tmp/proj/.codex/commands/__weave_commands__/pr-review/SKILL.md",
+			Target: "/tmp/proj/src/commands/pr-review.md",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(executor.lastOps) != 2 {
+		t.Fatalf("expected shared + provider projection ops, got %+v", executor.lastOps)
+	}
+	if !writer.called {
+		t.Fatalf("expected config writer called")
+	}
+}
+
+func TestForgeService_AddAsset_ConfigWriteFailureRollsBackAdditionalOperations(t *testing.T) {
+	t.Parallel()
+
+	executor := &executorSpy{}
+	writer := &writerSpy{err: errors.New("disk full")}
+
+	sut := ForgeService{
+		ProjectRootDetector: detectorStub{root: "/tmp/proj"},
+		ConfigValidator:     validatorStub{},
+		Executor:            executor,
+		Writer:              writer,
+	}
+
+	_, err := sut.AddAsset(context.Background(), config.Default(), AddAssetInput{
+		Kind:        AssetKindCommand,
+		Name:        "pr-review",
+		SourcePath:  "/tmp/proj/src/commands/pr-review.md",
+		ProjectPath: "/tmp/proj/.agents/commands/pr-review.md",
+		AdditionalOps: []fsops.Operation{{
+			Type:   fsops.OpCreateLink,
+			Path:   "/tmp/proj/.codex/commands/__weave_commands__/pr-review/SKILL.md",
+			Target: "/tmp/proj/src/commands/pr-review.md",
+		}},
+	})
+	if err == nil {
+		t.Fatalf("expected config write failure")
+	}
+
+	if len(executor.calls) != 2 {
+		t.Fatalf("expected apply + rollback calls, got %d", len(executor.calls))
+	}
+	if len(executor.calls[1]) != 2 {
+		t.Fatalf("expected rollback for both command targets, got %+v", executor.calls[1])
+	}
+}
+
+func TestForgeService_AddAsset_ApplyFailureRollsBackAllPlannedOperations(t *testing.T) {
+	t.Parallel()
+
+	executor := &failFirstApplyExecutor{}
+	writer := &writerSpy{}
+
+	sut := ForgeService{
+		ProjectRootDetector: detectorStub{root: "/tmp/proj"},
+		ConfigValidator:     validatorStub{},
+		Executor:            executor,
+		Writer:              writer,
+	}
+
+	_, err := sut.AddAsset(context.Background(), config.Default(), AddAssetInput{
+		Kind:        AssetKindCommand,
+		Name:        "pr-review",
+		SourcePath:  "/tmp/proj/src/commands/pr-review.md",
+		ProjectPath: "/tmp/proj/.agents/commands/pr-review.md",
+		AdditionalOps: []fsops.Operation{{
+			Type:   fsops.OpCreateLink,
+			Path:   "/tmp/proj/.codex/commands/__weave_commands__/pr-review/SKILL.md",
+			Target: "/tmp/proj/src/commands/pr-review.md",
+		}},
+	})
+	if err == nil {
+		t.Fatalf("expected apply failure")
+	}
+	if !strings.Contains(err.Error(), "rollback completed so no config or symlink changes were committed") {
+		t.Fatalf("expected full rollback semantics in error, got %q", err.Error())
+	}
+	if len(executor.calls) != 2 {
+		t.Fatalf("expected apply + rollback calls, got %d", len(executor.calls))
+	}
+	if len(executor.calls[1]) != 2 {
+		t.Fatalf("expected rollback for both shared and provider targets, got %+v", executor.calls[1])
+	}
+	if !allRemovePaths(executor.calls[1]) {
+		t.Fatalf("expected rollback to contain remove_path ops only, got %+v", executor.calls[1])
+	}
+	if writer.called {
+		t.Fatalf("config writer must not run when apply failed")
+	}
+}
+
 type detectorStub struct {
 	root string
 	err  error
@@ -518,6 +634,20 @@ type writerSpy struct {
 	err    error
 }
 
+type failFirstApplyExecutor struct {
+	calls [][]fsops.Operation
+	seen  bool
+}
+
+func (e *failFirstApplyExecutor) Apply(_ context.Context, ops []fsops.Operation) error {
+	e.calls = append(e.calls, append([]fsops.Operation(nil), ops...))
+	if !e.seen {
+		e.seen = true
+		return errors.New("apply failed")
+	}
+	return nil
+}
+
 type pathCheckerStub struct {
 	exists bool
 	err    error
@@ -533,4 +663,13 @@ func (p pathCheckerStub) Exists(_ string) (bool, error) {
 func (w *writerSpy) Write(_ config.Config) error {
 	w.called = true
 	return w.err
+}
+
+func allRemovePaths(ops []fsops.Operation) bool {
+	for _, op := range ops {
+		if op.Type != fsops.OpRemovePath {
+			return false
+		}
+	}
+	return true
 }

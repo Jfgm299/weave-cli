@@ -40,6 +40,10 @@ func (p stdinConflictPrompter) ResolveConflict(_ context.Context, input app.Conf
 }
 
 func (s assetAddService) Add(ctx context.Context, kind assetKind, name string, fromFlag string, dryRun bool, conflictPolicy app.ConflictPolicy, cfg config.Config) (app.AddAssetResult, error) {
+	return s.AddWithPlan(ctx, kind, name, fromFlag, dryRun, conflictPolicy, cfg, nil)
+}
+
+func (s assetAddService) AddWithPlan(ctx context.Context, kind assetKind, name string, fromFlag string, dryRun bool, conflictPolicy app.ConflictPolicy, cfg config.Config, plan *app.CommandInstallPlan) (app.AddAssetResult, error) {
 	root := s.Workdir
 	if root == "" {
 		root = resolveWorkdir()
@@ -50,6 +54,15 @@ func (s assetAddService) Add(ctx context.Context, kind assetKind, name string, f
 		return app.AddAssetResult{}, err
 	}
 
+	input, err := buildAddAssetInput(kind, root, name, fromBase, conflictPolicy, cfg, plan)
+	if err != nil {
+		return app.AddAssetResult{}, err
+	}
+
+	return s.Service.AddAssetWithOptions(ctx, cfg, input, app.RunOptions{DryRun: dryRun})
+}
+
+func buildAddAssetInput(kind assetKind, root string, name string, fromBase string, conflictPolicy app.ConflictPolicy, cfg config.Config, plan *app.CommandInstallPlan) (app.AddAssetInput, error) {
 	input := app.AddAssetInput{
 		Kind:           mapKind(kind),
 		Name:           name,
@@ -57,11 +70,44 @@ func (s assetAddService) Add(ctx context.Context, kind assetKind, name string, f
 		ProjectPath:    assetPathFor(kind, root, name),
 		ConflictPolicy: conflictPolicy,
 	}
-	if kind == assetKindCommand {
-		input.CommandMeta = &config.CommandMetaV1{}
+
+	if kind != assetKindCommand {
+		return input, nil
 	}
 
-	return s.Service.AddAssetWithOptions(ctx, cfg, input, app.RunOptions{DryRun: dryRun})
+	sharedInstall := true
+	targets := enabledProviderNames(cfg)
+	if plan != nil {
+		sharedInstall = plan.SharedInstall
+		targets = append([]string(nil), plan.ProviderTargets...)
+	}
+
+	if !sharedInstall {
+		input.ProjectPath = ""
+	}
+
+	if len(targets) == 0 {
+		return input, nil
+	}
+
+	metaShared := sharedInstall
+	input.CommandMeta = &config.CommandMetaV1{ProviderCompat: targets, SharedInstall: &metaShared}
+	projectionOps, err := app.BuildCommandProjectionOps(root, name, input.SourcePath, app.CommandInstallPlan{ProviderTargets: targets, SharedInstall: sharedInstall})
+	if err != nil {
+		return app.AddAssetInput{}, err
+	}
+	input.AdditionalOps = projectionOps
+
+	return input, nil
+}
+
+func enabledProviderNames(cfg config.Config) []string {
+	enabledProviders := app.ListEnabledProviders(cfg)
+	names := make([]string, 0, len(enabledProviders))
+	for _, provider := range enabledProviders {
+		names = append(names, provider.Name)
+	}
+	return names
 }
 
 func mapKind(kind assetKind) app.AssetKind {
