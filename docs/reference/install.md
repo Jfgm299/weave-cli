@@ -44,7 +44,7 @@ go run ./cmd/weave doctor
   - In non-interactive mode (CI/scripts), Weave fails fast with actionable guidance to run `git init`.
 
 - **Provider add fails with missing binary**
-  - Install required provider binaries (`claude`, `opencode`).
+  - Install required provider binaries (`claude`, `codex`, `opencode`).
   - Re-run `weave provider repair <provider>`.
 - **`weave` command is not found after install**
   - The installer writes PATH entries automatically for bash/zsh/fish/profile.

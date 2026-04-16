@@ -70,7 +70,7 @@ func TestProviderRunAction_List_ReturnsSortedEnabledProviders(t *testing.T) {
 	}
 
 	cfg := config.Default()
-	cfg.Providers = []config.Provider{{Name: "opencode", Enabled: true}, {Name: "claude-code", Enabled: true}, {Name: "disabled", Enabled: false}}
+	cfg.Providers = []config.Provider{{Name: "opencode", Enabled: true}, {Name: "claude-code", Enabled: true}, {Name: "codex", Enabled: true}, {Name: "disabled", Enabled: false}}
 	if err := (config.AtomicFileWriter{Path: filepath.Join(repo, "weave.yaml")}).Write(cfg); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
@@ -84,8 +84,78 @@ func TestProviderRunAction_List_ReturnsSortedEnabledProviders(t *testing.T) {
 		t.Fatalf("provider list failed: %v", err)
 	}
 
-	if len(names) != 2 || names[0] != "claude-code" || names[1] != "opencode" {
+	if len(names) != 3 || names[0] != "claude-code" || names[1] != "codex" || names[2] != "opencode" {
 		t.Fatalf("expected sorted enabled providers, got %+v", names)
+	}
+}
+
+func TestProviderRunAction_AddRemoveRepair_CodexParity(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("WEAVE_WORKDIR", repo)
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	cfg := config.Default()
+	if err := (config.AtomicFileWriter{Path: filepath.Join(repo, "weave.yaml")}).Write(cfg); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	svc := newProviderService(repo, providerBinaryResolverFunc(func(bin string) (string, error) {
+		return "/usr/local/bin/" + bin, nil
+	}))
+
+	if _, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionAdd, "codex", false); err != nil {
+		t.Fatalf("provider add codex failed: %v", err)
+	}
+
+	loaded, err := (config.FileLoader{Path: filepath.Join(repo, "weave.yaml")}).LoadOrDefault()
+	if err != nil {
+		t.Fatalf("load config after add: %v", err)
+	}
+	if len(loaded.Providers) != 1 || loaded.Providers[0].Name != "codex" || !loaded.Providers[0].Enabled {
+		t.Fatalf("expected enabled codex provider, got %+v", loaded.Providers)
+	}
+
+	if _, err := os.Lstat(filepath.Join(repo, ".codex", "AGENTS.md")); err != nil {
+		t.Fatalf("expected codex projection link after add: %v", err)
+	}
+
+	if _, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionRemove, "codex", false); err != nil {
+		t.Fatalf("provider remove codex failed: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(repo, ".codex")); !os.IsNotExist(err) {
+		t.Fatalf("expected .codex removed after provider remove, got err: %v", err)
+	}
+
+	if _, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionRepair, "codex", false); err != nil {
+		t.Fatalf("provider repair codex failed: %v", err)
+	}
+
+	if _, err := os.Lstat(filepath.Join(repo, ".codex", "AGENTS.md")); err != nil {
+		t.Fatalf("expected codex projection restored after repair: %v", err)
+	}
+}
+
+func TestProviderRunAction_AddCodex_MissingBinaryReturnsActionableMessage(t *testing.T) {
+	repo := t.TempDir()
+	t.Setenv("WEAVE_WORKDIR", repo)
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	svc := newProviderService(repo, providerBinaryResolverFunc(func(string) (string, error) {
+		return "", os.ErrNotExist
+	}))
+
+	_, _, err := runProviderAction(context.Background(), svc, providers.NewDefaultRegistry(), providerActionAdd, "codex", false)
+	if err == nil {
+		t.Fatalf("expected provider add codex to fail when binary is missing")
+	}
+
+	if !strings.Contains(err.Error(), "Install the missing binaries") || !strings.Contains(err.Error(), "weave provider repair codex") {
+		t.Fatalf("expected actionable missing binary error for codex, got %q", err.Error())
 	}
 }
 

@@ -222,6 +222,59 @@ func TestAssetAddService_Add_ConflictSkipPolicyProducesNoMutation(t *testing.T) 
 	}
 }
 
+func TestBuildAddAssetInput_Command_DefaultAllEnabledProvidersIncludesSharedAndProjections(t *testing.T) {
+	t.Parallel()
+
+	input, err := buildAddAssetInput(assetKindCommand, "/repo", "pr-review", "/src/commands", "", config.Config{
+		Providers: []config.Provider{{Name: "opencode", Enabled: true}, {Name: "claude-code", Enabled: true}, {Name: "codex", Enabled: true}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("unexpected input build error: %v", err)
+	}
+
+	if input.ProjectPath != filepath.Join("/repo", ".agents", "commands", "pr-review.md") {
+		t.Fatalf("expected shared project path, got %s", input.ProjectPath)
+	}
+	if input.CommandMeta == nil || len(input.CommandMeta.ProviderCompat) != 3 {
+		t.Fatalf("expected provider compat for all enabled providers, got %+v", input.CommandMeta)
+	}
+	if len(input.AdditionalOps) != 1 {
+		t.Fatalf("expected codex wrapper projection op only, got %+v", input.AdditionalOps)
+	}
+	assertHasProjectionOp(t, input.AdditionalOps, filepath.Join("/repo", ".codex", "commands", "__weave_commands__", "pr-review", "SKILL.md"), filepath.Join("/src/commands", "pr-review.md"))
+}
+
+func TestBuildAddAssetInput_Command_ExclusiveProviderSkipsSharedInstall(t *testing.T) {
+	t.Parallel()
+
+	plan := &app.CommandInstallPlan{ProviderTargets: []string{"codex"}, SharedInstall: false}
+	input, err := buildAddAssetInput(assetKindCommand, "/repo", "pr-review", "/src/commands", "", config.Default(), plan)
+	if err != nil {
+		t.Fatalf("unexpected input build error: %v", err)
+	}
+
+	if input.ProjectPath != "" {
+		t.Fatalf("expected no shared project path for exclusive install, got %s", input.ProjectPath)
+	}
+	if input.CommandMeta == nil || len(input.CommandMeta.ProviderCompat) != 1 || input.CommandMeta.ProviderCompat[0] != "codex" {
+		t.Fatalf("expected codex-only provider metadata, got %+v", input.CommandMeta)
+	}
+	if len(input.AdditionalOps) != 1 {
+		t.Fatalf("expected single projection op for codex, got %+v", input.AdditionalOps)
+	}
+	assertHasProjectionOp(t, input.AdditionalOps, filepath.Join("/repo", ".codex", "commands", "__weave_commands__", "pr-review", "SKILL.md"), filepath.Join("/src/commands", "pr-review.md"))
+}
+
+func assertHasProjectionOp(t *testing.T, ops []fsops.Operation, path string, target string) {
+	t.Helper()
+	for _, op := range ops {
+		if op.Type == fsops.OpCreateLink && op.Path == path && op.Target == target {
+			return
+		}
+	}
+	t.Fatalf("expected projection op create_link %s -> %s, got %+v", path, target, ops)
+}
+
 func containsString(s string, token string) bool {
 	return strings.Contains(s, token)
 }
