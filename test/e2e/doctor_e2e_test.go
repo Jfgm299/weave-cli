@@ -105,3 +105,57 @@ func TestDoctor_E2E_JSONOutputIsScriptFriendly(t *testing.T) {
 		t.Fatalf("expected healthy status, got %q", payload.Status)
 	}
 }
+
+func TestDoctor_E2E_ExclusiveCommandProjectionMissingShowsProviderScopedRepair(t *testing.T) {
+	t.Parallel()
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Clean(filepath.Join(wd, "..", ".."))
+
+	repo := t.TempDir()
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+
+	commandSource := filepath.Join(repo, "shared", "commands", "pr-review.md")
+	if err := os.MkdirAll(filepath.Dir(commandSource), 0o755); err != nil {
+		t.Fatalf("mkdir source: %v", err)
+	}
+	if err := os.WriteFile(commandSource, []byte("# cmd"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	cfg := "version: 1\n" +
+		"sources:\n" +
+		"  skills_dir: ~/.weave/skills\n" +
+		"  commands_dir: ~/.weave/commands\n" +
+		"sync:\n" +
+		"  mode: symlink\n" +
+		"skills: []\n" +
+		"commands:\n" +
+		"  - name: pr-review\n" +
+		"    source: " + commandSource + "\n" +
+		"    metadata:\n" +
+		"      provider_compat:\n" +
+		"        - codex\n" +
+		"      shared_install: false\n"
+
+	if err := os.WriteFile(filepath.Join(repo, "weave.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write weave.yaml: %v", err)
+	}
+
+	out, err := runCLI(repo, root, []string{"doctor"}, nil)
+	if err == nil {
+		t.Fatalf("expected doctor to report issues")
+	}
+
+	if !strings.Contains(out, "stale_command_projection") {
+		t.Fatalf("expected stale command projection code, got: %s", out)
+	}
+	if !strings.Contains(out, "weave command add pr-review --provider codex") {
+		t.Fatalf("expected provider-scoped repair command, got: %s", out)
+	}
+}

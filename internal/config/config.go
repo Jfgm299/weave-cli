@@ -32,4 +32,5 @@ type Asset struct {
 
 type CommandMetaV1 struct {
 	ProviderCompat []string `yaml:"provider_compat,omitempty"`
+	SharedInstall  *bool    `yaml:"shared_install,omitempty"`
 }

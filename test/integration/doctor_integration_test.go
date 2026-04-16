@@ -107,6 +107,52 @@ func TestDoctor_Integration_ExitCodeMappingForIssueState(t *testing.T) {
 	}
 }
 
+func TestDoctor_Integration_CommandExclusiveProjectionDriftReportsProviderScopedRepair(t *testing.T) {
+	t.Parallel()
+
+	repo := t.TempDir()
+	commandSource := filepath.Join(repo, "shared", "commands", "pr-review.md")
+	if err := os.MkdirAll(filepath.Dir(commandSource), 0o755); err != nil {
+		t.Fatalf("mkdir source: %v", err)
+	}
+	if err := os.WriteFile(commandSource, []byte("# cmd"), 0o644); err != nil {
+		t.Fatalf("write command source: %v", err)
+	}
+
+	shared := false
+	result, err := (app.DoctorService{}).Run(context.Background(), repo, config.Config{
+		Version: 1,
+		Sync:    config.Sync{Mode: "symlink"},
+		Commands: []config.Asset{{
+			Name:   "pr-review",
+			Source: commandSource,
+			Meta: &config.CommandMetaV1{
+				ProviderCompat: []string{"codex"},
+				SharedInstall:  &shared,
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("doctor run failed: %v", err)
+	}
+
+	if result.Status != app.DoctorStatusIssuesFound {
+		t.Fatalf("expected issues status, got %q", result.Status)
+	}
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Code == "stale_command_projection" {
+			found = true
+			if issue.RepairCommand != "weave command add pr-review --provider codex" {
+				t.Fatalf("expected provider-scoped repair guidance, got %q", issue.RepairCommand)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected stale_command_projection issue, got %+v", result.Issues)
+	}
+}
+
 type successfulExecutor struct{}
 
 func (successfulExecutor) Apply(ctx context.Context, ops []fsops.Operation) error {

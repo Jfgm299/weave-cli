@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/Jfgm299/weave-cli/internal/app"
+	"github.com/Jfgm299/weave-cli/internal/config"
+	"github.com/Jfgm299/weave-cli/internal/fsops"
 )
 
 func TestParseFromFlag_ParsesLongForm(t *testing.T) {
@@ -100,7 +102,7 @@ func TestParseProviderAction_ListRejectsDryRun(t *testing.T) {
 func TestParseAddFlags_RejectsUnknownFlag(t *testing.T) {
 	t.Parallel()
 
-	_, _, _, err := parseAddFlags([]string{"--unknown"})
+	_, _, _, _, err := parseAddFlags([]string{"--unknown"})
 	if err == nil {
 		t.Fatalf("expected unsupported flag error")
 	}
@@ -124,7 +126,7 @@ func TestParseAddFlags_ParsesConflictPolicyFlags(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, _, policy, err := parseAddFlags(tc.args)
+			_, _, policy, _, err := parseAddFlags(tc.args)
 			if err != nil {
 				t.Fatalf("unexpected parse error: %v", err)
 			}
@@ -139,11 +141,118 @@ func TestParseAddFlags_ParsesConflictPolicyFlags(t *testing.T) {
 func TestParseAddFlags_RejectsMultipleConflictPolicyFlags(t *testing.T) {
 	t.Parallel()
 
-	_, _, _, err := parseAddFlags([]string{"--overwrite", "--backup"})
+	_, _, _, _, err := parseAddFlags([]string{"--overwrite", "--backup"})
 	if err == nil {
 		t.Fatalf("expected conflict policy parsing error")
 	}
 }
+
+func TestParseAddFlags_ParsesProviderFlag(t *testing.T) {
+	t.Parallel()
+
+	_, _, _, provider, err := parseAddFlags([]string{"--provider", "codex"})
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if provider != "codex" {
+		t.Fatalf("expected provider codex, got %q", provider)
+	}
+}
+
+func TestParseAddFlags_ParsesProviderEqualsFlag(t *testing.T) {
+	t.Parallel()
+
+	_, _, _, provider, err := parseAddFlags([]string{"--provider=opencode"})
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if provider != "opencode" {
+		t.Fatalf("expected provider opencode, got %q", provider)
+	}
+}
+
+func TestResolveCommandInstallPlan_DefaultTargetsAllEnabledProviders(t *testing.T) {
+	t.Parallel()
+
+	plan, err := resolveCommandInstallPlan(assetKindCommand, "", config.Config{Providers: []config.Provider{
+		{Name: "opencode", Enabled: true},
+		{Name: "claude-code", Enabled: true},
+		{Name: "codex", Enabled: true},
+	}})
+	if err != nil {
+		t.Fatalf("unexpected resolve error: %v", err)
+	}
+	if plan == nil || !plan.SharedInstall {
+		t.Fatalf("expected shared install plan, got %+v", plan)
+	}
+	if len(plan.ProviderTargets) != 3 || plan.ProviderTargets[0] != "claude-code" || plan.ProviderTargets[1] != "codex" || plan.ProviderTargets[2] != "opencode" {
+		t.Fatalf("unexpected provider targets: %+v", plan.ProviderTargets)
+	}
+}
+
+func TestResolveCommandInstallPlan_ProviderFlagCreatesExclusivePlan(t *testing.T) {
+	t.Parallel()
+
+	plan, err := resolveCommandInstallPlan(assetKindCommand, "codex", config.Default())
+	if err != nil {
+		t.Fatalf("unexpected resolve error: %v", err)
+	}
+	if plan == nil || plan.SharedInstall {
+		t.Fatalf("expected exclusive plan, got %+v", plan)
+	}
+	if len(plan.ProviderTargets) != 1 || plan.ProviderTargets[0] != "codex" {
+		t.Fatalf("unexpected provider targets: %+v", plan.ProviderTargets)
+	}
+}
+
+func TestResolveCommandInstallPlanWithDeps_DelegatesUnsupportedProviderToPlanner(t *testing.T) {
+	t.Parallel()
+
+	_, err := resolveCommandInstallPlanWithDeps(assetKindCommand, "future-provider", config.Default(), app.CommandInstallPlanner{Registry: commandRoutingRegistryStub{}})
+	if err == nil {
+		t.Fatalf("expected unsupported provider error from planning layer")
+	}
+	if !strings.Contains(err.Error(), "unsupported provider") {
+		t.Fatalf("expected planning-layer provider validation error, got %q", err.Error())
+	}
+}
+
+func TestResolveCommandInstallPlan_NoProvidersNonInteractiveFails(t *testing.T) {
+	t.Parallel()
+
+	orig := isInteractiveSession
+	isInteractiveSession = func() bool { return false }
+	t.Cleanup(func() { isInteractiveSession = orig })
+
+	_, err := resolveCommandInstallPlan(assetKindCommand, "", config.Default())
+	if err == nil {
+		t.Fatalf("expected no-provider non-interactive failure")
+	}
+	if !strings.Contains(err.Error(), "No providers are currently enabled") || !strings.Contains(err.Error(), "--provider") {
+		t.Fatalf("expected actionable no-provider guidance, got %q", err.Error())
+	}
+}
+
+type commandRoutingRegistryStub struct{}
+
+func (commandRoutingRegistryStub) Get(name string) (app.ProviderAdapter, bool) {
+	if name == "claude-code" || name == "codex" || name == "opencode" {
+		return rootProviderAdapterStub{name: name}, true
+	}
+	return nil, false
+}
+
+func (commandRoutingRegistryStub) SupportedNames() []string {
+	return []string{"claude-code", "codex", "opencode"}
+}
+
+type rootProviderAdapterStub struct{ name string }
+
+func (s rootProviderAdapterStub) Name() string                               { return s.name }
+func (rootProviderAdapterStub) RequiredBinaries() []string                   { return nil }
+func (rootProviderAdapterStub) PlanSetup(string) ([]fsops.Operation, error)  { return nil, nil }
+func (rootProviderAdapterStub) PlanRepair(string) ([]fsops.Operation, error) { return nil, nil }
+func (rootProviderAdapterStub) PlanRemove(string) ([]fsops.Operation, error) { return nil, nil }
 
 func TestParseDryRunOnly_RejectsUnknownFlag(t *testing.T) {
 	t.Parallel()
