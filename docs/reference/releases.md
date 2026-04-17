@@ -23,8 +23,12 @@ Any release that introduces breaking behavior MUST include:
 - Repository hygiene gate for tracked Python cache artifacts: `.github/workflows/repo-hygiene-gate.yml`
 - PR checklist-label-issue coherence gate: `.github/workflows/pr-metadata-coherence.yml`
 
-## CI evidence automation (Option A baseline)
+## CI evidence automation (Option A full)
 
 - Per-workflow evidence payload producer: `scripts/ci/collect_workflow_evidence.py`
-- Deterministic SHA manifest aggregator: `scripts/ci/evidence_manifest.py`
-- Local baseline helper (writes `openspec/evidence/<sha>.json`): `scripts/ci/run_evidence_baseline.py`
+- `workflow_run` evidence collector by head SHA: `scripts/ci/collect_workflow_run_evidence.py`
+- Deterministic SHA manifest generator + digest metadata: `scripts/ci/evidence_manifest.py`
+- PR comment upsert utility (manifest reference visibility): `scripts/ci/post_manifest_pr_comment.py`
+- OpenSpec machine-reference generator (no manual URL copy): `scripts/ci/generate_openspec_evidence_refs.py`
+- CI orchestration workflow: `.github/workflows/ci-evidence-aggregator.yml`
+- Local baseline helper (writes `openspec/evidence/<sha>.json`, `pr-comment-<sha>.md`, `refs-<sha>.md`): `scripts/ci/run_evidence_baseline.py`

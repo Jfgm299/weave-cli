@@ -32,10 +32,10 @@ Implement v3 planning delta with strict v1-style batch discipline:
 | B0 | P0 | R-DEBT-V3-01 | Close DEF-V2-001 (`__pycache__` tracked artifacts) | [x] |
 | B0 | P0 | R-DEBT-V3-02 | Close DEF-V2-002 (manual CI evidence capture) | [x] |
 | B0 | P0 | R-DEBT-V3-03 | Close DEF-V2-003 (PR checklist-label coherence drift) | [x] |
-| B1 | P0 | R-CI-01 | Per-workflow JSON evidence emission contract | [ ] |
-| B1 | P0 | R-CI-02 | `workflow_run` SHA aggregator for deterministic consolidation | [ ] |
-| B1 | P0 | R-CI-03 | Deterministic manifest reference + PR visibility | [ ] |
-| B1 | P0 | R-CI-04 | OpenSpec evidence flow defaults to machine-generated references | [ ] |
+| B1 | P0 | R-CI-01 | Per-workflow JSON evidence emission contract | [-] |
+| B1 | P0 | R-CI-02 | `workflow_run` SHA aggregator for deterministic consolidation | [-] |
+| B1 | P0 | R-CI-03 | Deterministic manifest reference + PR visibility | [-] |
+| B1 | P0 | R-CI-04 | OpenSpec evidence flow defaults to machine-generated references | [-] |
 | B2 | P0 | R-VER-01 | Semver bump governance policy for weave binary | [ ] |
 | B2 | P0 | R-VER-02 | Enforce synchronized updates (`internal/cli/version.go` + version tests) | [ ] |
 | B2 | P0 | R-VER-03 | CI/release gate for version governance compliance | [ ] |
@@ -145,52 +145,64 @@ Implement v3 planning delta with strict v1-style batch discipline:
 
 | Requirement | Unit | Integration | E2E/CI | Acceptance Evidence | Status |
 |-------------|------|-------------|--------|---------------------|--------|
-| R-CI-01 (per-workflow JSON evidence) | B1-T1.1, B1-T1.2 | B1-T1.3 | B1-T1.4 | B1-T1.5 | [ ] |
-| R-CI-02 (`workflow_run` SHA aggregator) | B1-T2.1, B1-T2.2 | B1-T2.3 | B1-T2.4 | B1-T2.5 | [ ] |
-| R-CI-03 (deterministic manifest + PR visibility) | B1-T3.1, B1-T3.2 | B1-T3.3 | B1-T3.4 | B1-T3.5 | [ ] |
-| R-CI-04 (OpenSpec evidence default automation) | B1-T4.1, B1-T4.2 | B1-T4.3 | B1-T4.4 | B1-T4.5 | [ ] |
+| R-CI-01 (per-workflow JSON evidence) | B1-T1.1, B1-T1.2 | B1-T1.3 | B1-T1.4 | B1-T1.5 | [-] |
+| R-CI-02 (`workflow_run` SHA aggregator) | B1-T2.1, B1-T2.2 | B1-T2.3 | B1-T2.4 | B1-T2.5 | [-] |
+| R-CI-03 (deterministic manifest + PR visibility) | B1-T3.1, B1-T3.2 | B1-T3.3 | B1-T3.4 | B1-T3.5 | [-] |
+| R-CI-04 (OpenSpec evidence default automation) | B1-T4.1, B1-T4.2 | B1-T4.3 | B1-T4.4 | B1-T4.5 | [-] |
 
 ### B1 Tasks (live checklist)
 
 #### R-CI-01 — per-workflow JSON evidence emission
 
-- [ ] **B1-T1.1 Unit (success):** evidence schema validator accepts required fields and deterministic keys.
-- [ ] **B1-T1.2 Unit (edge):** missing or inconsistent fields fail schema validation.
-- [ ] **B1-T1.3 Integration:** required workflows emit artifacts conforming to schema.
-- [ ] **B1-T1.4 E2E/CI:** complete run set produces evidence artifacts for all required workflows.
-- [ ] **B1-T1.5 Evidence:** artifact list and schema validation output captured in manifest.
+- [x] **B1-T1.1 Unit (success):** evidence schema validator accepts required fields and deterministic keys.
+- [x] **B1-T1.2 Unit (edge):** missing or inconsistent fields fail schema validation.
+- [x] **B1-T1.3 Integration:** required workflows emit artifacts conforming to schema.
+- [-] **B1-T1.4 E2E/CI:** complete run set produces evidence artifacts for all required workflows.
+- [x] **B1-T1.5 Evidence:** artifact list and schema validation output captured in manifest.
 
 #### R-CI-02 — `workflow_run` aggregator consolidation by head SHA
 
-- [ ] **B1-T2.1 Unit (success):** aggregator groups evidence by exact head SHA deterministically.
-- [ ] **B1-T2.2 Unit (edge):** partial/missing workflow evidence is represented explicitly as missing/failure state.
-- [ ] **B1-T2.3 Integration:** aggregator pipeline ingests per-run artifacts and emits one manifest per SHA.
-- [ ] **B1-T2.4 E2E/CI:** reruns for same SHA preserve deterministic consolidated output contract.
-- [ ] **B1-T2.5 Evidence:** consolidated manifest payload contains stable ordered workflow entries.
+- [x] **B1-T2.1 Unit (success):** aggregator groups evidence by exact head SHA deterministically.
+- [x] **B1-T2.2 Unit (edge):** partial/missing workflow evidence is represented explicitly as missing/failure state.
+- [x] **B1-T2.3 Integration:** aggregator pipeline ingests per-run artifacts and emits one manifest per SHA.
+- [-] **B1-T2.4 E2E/CI:** reruns for same SHA preserve deterministic consolidated output contract.
+- [x] **B1-T2.5 Evidence:** consolidated manifest payload contains stable ordered workflow entries.
 
 #### R-CI-03 — deterministic manifest reference + PR visibility
 
-- [ ] **B1-T3.1 Unit (success):** manifest reference path generation is deterministic for SHA input.
-- [ ] **B1-T3.2 Unit (edge):** invalid SHA input fails with actionable diagnostics.
-- [ ] **B1-T3.3 Integration:** PR comment payload references generated manifest deterministically.
-- [ ] **B1-T3.4 E2E/CI:** PR flow displays manifest reference after required workflows complete.
-- [ ] **B1-T3.5 Evidence:** PR comment snapshot and artifact reference align with same SHA manifest.
+- [x] **B1-T3.1 Unit (success):** manifest reference path generation is deterministic for SHA input.
+- [x] **B1-T3.2 Unit (edge):** invalid SHA input fails with actionable diagnostics.
+- [x] **B1-T3.3 Integration:** PR comment payload references generated manifest deterministically.
+- [-] **B1-T3.4 E2E/CI:** PR flow displays manifest reference after required workflows complete.
+- [x] **B1-T3.5 Evidence:** PR comment snapshot and artifact reference align with same SHA manifest.
 
 #### R-CI-04 — OpenSpec evidence defaults to machine-generated references
 
-- [ ] **B1-T4.1 Unit (success):** evidence extraction utility resolves manifest references for tasks without manual URL input.
-- [ ] **B1-T4.2 Unit (edge):** missing manifest reference triggers deterministic “evidence unavailable” state.
-- [ ] **B1-T4.3 Integration:** tasks evidence logging consumes manifest references directly.
-- [ ] **B1-T4.4 E2E/CI:** end-to-end batch evidence closure uses automated references only.
-- [ ] **B1-T4.5 Evidence:** sample task closure demonstrates no manual run URL copy requirement.
+- [x] **B1-T4.1 Unit (success):** evidence extraction utility resolves manifest references for tasks without manual URL input.
+- [x] **B1-T4.2 Unit (edge):** missing manifest reference triggers deterministic “evidence unavailable” state.
+- [x] **B1-T4.3 Integration:** tasks evidence logging consumes manifest references directly.
+- [-] **B1-T4.4 E2E/CI:** end-to-end batch evidence closure uses automated references only.
+- [x] **B1-T4.5 Evidence:** sample task closure demonstrates no manual run URL copy requirement.
 
 ### B1 Evidence Log (current)
 
-- Pending — no execution evidence captured yet.
+- Targeted unit/integration test suite (R-CI-01/02/03/04):
+  - `python3 -m unittest scripts/ci/collect_workflow_evidence_test.py scripts/ci/evidence_manifest_test.py scripts/ci/collect_workflow_run_evidence_test.py scripts/ci/post_manifest_pr_comment_test.py scripts/ci/generate_openspec_evidence_refs_test.py`
+  - Outcome: `Ran 13 tests ... OK`.
+- Local deterministic baseline generation:
+  - `python3 scripts/ci/run_evidence_baseline.py`
+  - Outcome: generated manifest `openspec/evidence/02c09034cc774d904ec65c46811bbc925e941cbf.json`.
+  - Outcome: generated PR summary snapshot `openspec/evidence/pr-comment-02c09034cc774d904ec65c46811bbc925e941cbf.md`.
+  - Outcome: generated OpenSpec machine reference snapshot `openspec/evidence/refs-02c09034cc774d904ec65c46811bbc925e941cbf.md`.
+- Batch 1 workflow/scripts delivered:
+  - New `workflow_run` aggregator workflow: `.github/workflows/ci-evidence-aggregator.yml`.
+  - Artifact collector by SHA: `scripts/ci/collect_workflow_run_evidence.py`.
+  - PR comment upsert utility: `scripts/ci/post_manifest_pr_comment.py`.
+  - OpenSpec machine-reference generator: `scripts/ci/generate_openspec_evidence_refs.py`.
 
 ### B1 Blockers (current)
 
-- None.
+- Pending live GitHub CI execution evidence for `workflow_run` aggregation and automated PR comment update for a real PR SHA.
 
 ---
 
