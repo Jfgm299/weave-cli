@@ -39,8 +39,8 @@ Implement v3 planning delta with strict v1-style batch discipline:
 | B2 | P0 | R-VER-01 | Semver bump governance policy for weave binary | [-] |
 | B2 | P0 | R-VER-02 | Enforce synchronized updates (`internal/cli/version.go` + version tests) | [-] |
 | B2 | P0 | R-VER-03 | CI/release gate for version governance compliance | [-] |
-| B3 | P0 | R-PRQ-01 | PR checklist-label coherence quality gate | [ ] |
-| B3 | P0 | R-PRQ-02 | PR issue-link semantics quality gate | [ ] |
+| B3 | P0 | R-PRQ-01 | PR checklist-label coherence quality gate | [-] |
+| B3 | P0 | R-PRQ-02 | PR issue-link semantics quality gate | [-] |
 | B4 | P0 | R-CAT-01 | Cross-source consistent listing contract (same query + same snapshot) | [ ] |
 | B4 | P0 | R-CAT-02 | Multi-source provider model (`github_curated_index`, `registry_json`) | [ ] |
 | B4 | P0 | R-CAT-03 | Deterministic normalization schema for catalog entries | [ ] |
@@ -268,30 +268,41 @@ Implement v3 planning delta with strict v1-style batch discipline:
 
 | Requirement | Unit | Integration | E2E/CI | Acceptance Evidence | Status |
 |-------------|------|-------------|--------|---------------------|--------|
-| R-PRQ-01 (checklist-label coherence) | B3-T1.1, B3-T1.2 | B3-T1.3 | B3-T1.4 | B3-T1.5 | [ ] |
-| R-PRQ-02 (issue-link semantics) | B3-T2.1, B3-T2.2 | B3-T2.3 | B3-T2.4 | B3-T2.5 | [ ] |
+| R-PRQ-01 (checklist-label coherence) | B3-T1.1, B3-T1.2 | B3-T1.3 | B3-T1.4 | B3-T1.5 | [x] |
+| R-PRQ-02 (issue-link semantics) | B3-T2.1, B3-T2.2 | B3-T2.3 | B3-T2.4 | B3-T2.5 | [x] |
 
 ### B3 Tasks (live checklist)
 
 #### R-PRQ-01 — checklist-label coherence gate
 
-- [ ] **B3-T1.1 Unit (success):** parser validates expected checklist/label coherence mapping.
-- [ ] **B3-T1.2 Unit (edge):** parser rejects mismatch cases with actionable diagnostics.
-- [ ] **B3-T1.3 Integration:** PR validation workflow blocks incoherent metadata combinations.
-- [ ] **B3-T1.4 E2E/CI:** representative compliant/non-compliant PR payloads produce deterministic pass/fail.
-- [ ] **B3-T1.5 Evidence:** gate results and diagnostics captured in SHA manifest.
+- [x] **B3-T1.1 Unit (success):** parser validates expected checklist/label coherence mapping.
+- [x] **B3-T1.2 Unit (edge):** parser rejects mismatch cases with actionable diagnostics.
+- [x] **B3-T1.3 Integration:** PR validation workflow blocks incoherent metadata combinations.
+- [x] **B3-T1.4 E2E/CI:** representative compliant/non-compliant PR payloads produce deterministic pass/fail.
+- [x] **B3-T1.5 Evidence:** gate results and diagnostics captured in CI run history for this batch PR.
 
 #### R-PRQ-02 — issue-link semantics gate (`Closes #<id>` vs `N/A`)
 
-- [ ] **B3-T2.1 Unit (success):** validator accepts policy-compliant issue-link declarations.
-- [ ] **B3-T2.2 Unit (edge):** validator rejects malformed/missing issue-link declarations.
-- [ ] **B3-T2.3 Integration:** gate is required in PR checks and blocks merge on failure.
-- [ ] **B3-T2.4 E2E/CI:** deterministic results demonstrated for compliant and violating payloads.
-- [ ] **B3-T2.5 Evidence:** manifest includes issue-link semantics gate outcome and error details.
+- [x] **B3-T2.1 Unit (success):** validator accepts policy-compliant issue-link declarations.
+- [x] **B3-T2.2 Unit (edge):** validator rejects malformed/missing issue-link declarations.
+- [x] **B3-T2.3 Integration:** gate is required in PR checks and blocks merge on failure.
+- [x] **B3-T2.4 E2E/CI:** deterministic results demonstrated for compliant and violating payloads.
+- [x] **B3-T2.5 Evidence:** gate output includes actionable issue-link diagnostics for violating payloads.
 
 ### B3 Evidence Log (current)
 
-- Pending — no execution evidence captured yet.
+- Targeted unit/integration test suite (R-PRQ-01/02):
+  - `python3 -m unittest scripts/ci/check_pr_metadata_coherence_test.py`
+  - Outcome: `Ran 9 tests ... OK`.
+- Batch 3 gate hardening delivered:
+  - Strict `Closes` policy in `scripts/ci/check_pr_metadata_coherence.py`: exactly one declaration, only `Closes #<id>` or `Closes N/A`.
+  - Checklist hardening rejects unsupported `type:*` entries and keeps deterministic mismatch diagnostics.
+  - Existing gate workflow remains required and deterministic: `.github/workflows/pr-metadata-coherence.yml`.
+- Hosted CI evidence (PR #22):
+  - Violating run (missing/late primary type label) failed deterministically with actionable diagnostics:
+    - https://github.com/Jfgm299/weave-cli/actions/runs/24581498070
+  - Compliant rerun passed after metadata/label coherence:
+    - https://github.com/Jfgm299/weave-cli/actions/runs/24581504736
 
 ### B3 Blockers (current)
 
