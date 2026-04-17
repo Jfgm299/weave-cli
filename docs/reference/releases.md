@@ -14,6 +14,9 @@ Any release that introduces breaking behavior MUST include:
 - [ ] Versioned artifact names
 - [ ] checksums.txt + checksums.txt.sig
 - [ ] Migration section when breaking changes exist
+- [ ] Exactly one semver label in PR metadata: `semver:patch|semver:minor|semver:major`
+- [ ] `Semver rationale: <why>` line present in PR body
+- [ ] `internal/cli/version.go` and `internal/cli/version_test.go` updated together for version bumps
 
 ## Automated enforcement
 
@@ -22,6 +25,22 @@ Any release that introduces breaking behavior MUST include:
 - Migration-note gate for PRs labeled `breaking-change`: `.github/workflows/migration-note-gate.yml`
 - Repository hygiene gate for tracked Python cache artifacts: `.github/workflows/repo-hygiene-gate.yml`
 - PR checklist-label-issue coherence gate: `.github/workflows/pr-metadata-coherence.yml`
+- Version governance gate (semver intent + rationale + version source/test sync): `.github/workflows/version-governance-gate.yml`
+
+## Semver governance contract (v3)
+
+Semver bump rules:
+
+- **PATCH**: backward-compatible fixes/chore/docs with no feature expansion or breaking behavior.
+- **MINOR**: backward-compatible feature addition or meaningful capability extension.
+- **MAJOR**: breaking behavior, breaking CLI contract, or incompatible schema/change requiring migration.
+
+Automated gate behavior:
+
+- Requires exactly one bump intent label: `semver:patch|semver:minor|semver:major`.
+- Requires explicit bump rationale via `Semver rationale: <why>` in PR body.
+- Requires synchronized version update contract: `internal/cli/version.go` and `internal/cli/version_test.go` must change together.
+- Fails when declared bump intent does not match computed semver transition.
 
 ## CI evidence automation (Option A full)
 
