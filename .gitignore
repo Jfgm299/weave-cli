@@ -1,2 +1,6 @@
 # Local markdownlint overrides (do not commit)
 .markdownlint.json
+
+# Python cache and bytecode artifacts
+__pycache__/
+*.py[cod]

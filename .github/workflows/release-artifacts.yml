@@ -39,3 +39,20 @@ jobs:
         with:
           name: weave-release-${{ github.ref_name }}
           path: dist/
+
+      - name: Emit workflow evidence payload
+        if: ${{ always() }}
+        env:
+          EVIDENCE_STATUS: ${{ job.status }}
+        run: |
+          python3 scripts/ci/collect_workflow_evidence.py \
+            --workflow-name release-artifacts \
+            --status "$EVIDENCE_STATUS" \
+            --output ci-evidence/release-artifacts.json
+
+      - name: Upload workflow evidence artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-evidence-release-artifacts
+          path: ci-evidence/release-artifacts.json

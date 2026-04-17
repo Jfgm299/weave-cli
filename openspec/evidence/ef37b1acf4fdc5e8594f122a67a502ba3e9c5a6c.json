@@ -1,0 +1,66 @@
+{
+  "head_sha": "ef37b1acf4fdc5e8594f122a67a502ba3e9c5a6c",
+  "schema_version": 1,
+  "workflows": [
+    {
+      "checks": {
+        "summary": "install-artifact-validation:success"
+      },
+      "head_sha": "ef37b1acf4fdc5e8594f122a67a502ba3e9c5a6c",
+      "run_id": "local-baseline",
+      "run_url": "https://github.com/Jfgm299/weave-cli/actions/runs/local-baseline",
+      "schema_version": 1,
+      "status": "success",
+      "timestamp": "2026-04-17T14:45:41.145472+00:00",
+      "workflow_name": "install-artifact-validation"
+    },
+    {
+      "checks": {
+        "summary": "migration-note-gate:success"
+      },
+      "head_sha": "ef37b1acf4fdc5e8594f122a67a502ba3e9c5a6c",
+      "run_id": "local-baseline",
+      "run_url": "https://github.com/Jfgm299/weave-cli/actions/runs/local-baseline",
+      "schema_version": 1,
+      "status": "success",
+      "timestamp": "2026-04-17T14:45:41.206482+00:00",
+      "workflow_name": "migration-note-gate"
+    },
+    {
+      "checks": {
+        "summary": "pr-metadata-coherence:success"
+      },
+      "head_sha": "ef37b1acf4fdc5e8594f122a67a502ba3e9c5a6c",
+      "run_id": "local-baseline",
+      "run_url": "https://github.com/Jfgm299/weave-cli/actions/runs/local-baseline",
+      "schema_version": 1,
+      "status": "success",
+      "timestamp": "2026-04-17T14:45:41.334260+00:00",
+      "workflow_name": "pr-metadata-coherence"
+    },
+    {
+      "checks": {
+        "summary": "release-artifacts:success"
+      },
+      "head_sha": "ef37b1acf4fdc5e8594f122a67a502ba3e9c5a6c",
+      "run_id": "local-baseline",
+      "run_url": "https://github.com/Jfgm299/weave-cli/actions/runs/local-baseline",
+      "schema_version": 1,
+      "status": "success",
+      "timestamp": "2026-04-17T14:45:41.268879+00:00",
+      "workflow_name": "release-artifacts"
+    },
+    {
+      "checks": {
+        "summary": "repo-hygiene-gate:success"
+      },
+      "head_sha": "ef37b1acf4fdc5e8594f122a67a502ba3e9c5a6c",
+      "run_id": "local-baseline",
+      "run_url": "https://github.com/Jfgm299/weave-cli/actions/runs/local-baseline",
+      "schema_version": 1,
+      "status": "success",
+      "timestamp": "2026-04-17T14:45:41.397041+00:00",
+      "workflow_name": "repo-hygiene-gate"
+    }
+  ]
+}
