@@ -63,10 +63,12 @@ def api_get_json(path: str, token: str) -> dict:
 
 
 def download_artifact_payload(archive_url: str, token: str) -> dict:
+    # For artifact archive downloads GitHub responds with a redirect to a signed URL
+    # where Authorization headers are not accepted/required. Send minimal headers to
+    # avoid 401 from downstream storage endpoints.
     req = urllib.request.Request(
         archive_url,
         headers={
-            "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         },
