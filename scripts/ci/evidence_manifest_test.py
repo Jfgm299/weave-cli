@@ -165,7 +165,7 @@ class EvidenceManifestTests(unittest.TestCase):
                 data_a["snapshot"]["manifest_digest_sha256"],
                 data_b["snapshot"]["manifest_digest_sha256"],
             )
-            self.assertEqual(data_a["snapshot"]["workflow_count"], 5)
+            self.assertEqual(data_a["snapshot"]["workflow_count"], 6)
 
     def test_rejects_invalid_sha(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

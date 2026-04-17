@@ -14,6 +14,7 @@ REQUIRED_WORKFLOWS = [
     "release-artifacts",
     "pr-metadata-coherence",
     "repo-hygiene-gate",
+    "version-governance-gate",
 ]
 REQUIRED_KEYS = {
     "schema_version",

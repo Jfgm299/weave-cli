@@ -36,9 +36,9 @@ Implement v3 planning delta with strict v1-style batch discipline:
 | B1 | P0 | R-CI-02 | `workflow_run` SHA aggregator for deterministic consolidation | [-] |
 | B1 | P0 | R-CI-03 | Deterministic manifest reference + PR visibility | [-] |
 | B1 | P0 | R-CI-04 | OpenSpec evidence flow defaults to machine-generated references | [-] |
-| B2 | P0 | R-VER-01 | Semver bump governance policy for weave binary | [ ] |
-| B2 | P0 | R-VER-02 | Enforce synchronized updates (`internal/cli/version.go` + version tests) | [ ] |
-| B2 | P0 | R-VER-03 | CI/release gate for version governance compliance | [ ] |
+| B2 | P0 | R-VER-01 | Semver bump governance policy for weave binary | [-] |
+| B2 | P0 | R-VER-02 | Enforce synchronized updates (`internal/cli/version.go` + version tests) | [-] |
+| B2 | P0 | R-VER-03 | CI/release gate for version governance compliance | [-] |
 | B3 | P0 | R-PRQ-01 | PR checklist-label coherence quality gate | [ ] |
 | B3 | P0 | R-PRQ-02 | PR issue-link semantics quality gate | [ ] |
 | B4 | P0 | R-CAT-01 | Cross-source consistent listing contract (same query + same snapshot) | [ ] |
@@ -212,43 +212,53 @@ Implement v3 planning delta with strict v1-style batch discipline:
 
 | Requirement | Unit | Integration | E2E/CI | Acceptance Evidence | Status |
 |-------------|------|-------------|--------|---------------------|--------|
-| R-VER-01 (semver bump governance) | B2-T1.1, B2-T1.2 | B2-T1.3 | B2-T1.4 | B2-T1.5 | [ ] |
-| R-VER-02 (sync `version.go` + version tests) | B2-T2.1, B2-T2.2 | B2-T2.3 | B2-T2.4 | B2-T2.5 | [ ] |
-| R-VER-03 (CI/release governance gate) | B2-T3.1, B2-T3.2 | B2-T3.3 | B2-T3.4 | B2-T3.5 | [ ] |
+| R-VER-01 (semver bump governance) | B2-T1.1, B2-T1.2 | B2-T1.3 | B2-T1.4 | B2-T1.5 | [-] |
+| R-VER-02 (sync `version.go` + version tests) | B2-T2.1, B2-T2.2 | B2-T2.3 | B2-T2.4 | B2-T2.5 | [-] |
+| R-VER-03 (CI/release governance gate) | B2-T3.1, B2-T3.2 | B2-T3.3 | B2-T3.4 | B2-T3.5 | [-] |
 
 ### B2 Tasks (live checklist)
 
 #### R-VER-01 — semver bump governance policy
 
-- [ ] **B2-T1.1 Unit (success):** policy evaluator classifies patch/minor/major scenarios deterministically.
-- [ ] **B2-T1.2 Unit (edge):** ambiguous or missing bump rationale fails validation.
-- [ ] **B2-T1.3 Integration:** release metadata ingestion enforces bump policy mapping.
-- [ ] **B2-T1.4 E2E/CI:** representative release candidate checks pass/fail according to semver rules.
-- [ ] **B2-T1.5 Evidence:** policy matrix output is present in deterministic manifest.
+- [x] **B2-T1.1 Unit (success):** policy evaluator classifies patch/minor/major scenarios deterministically.
+- [x] **B2-T1.2 Unit (edge):** ambiguous or missing bump rationale fails validation.
+- [x] **B2-T1.3 Integration:** release metadata ingestion enforces bump policy mapping.
+- [-] **B2-T1.4 E2E/CI:** representative release candidate checks pass/fail according to semver rules.
+- [-] **B2-T1.5 Evidence:** policy matrix output is present in deterministic manifest.
 
 #### R-VER-02 — synchronized `internal/cli/version.go` and version tests
 
-- [ ] **B2-T2.1 Unit (success):** validator passes when version source and version tests are updated coherently.
-- [ ] **B2-T2.2 Unit (edge):** validator fails when one of source/tests changes without counterpart update.
-- [ ] **B2-T2.3 Integration:** CI check inspects diff and validates synchronized version updates.
-- [ ] **B2-T2.4 E2E/CI:** unsynchronized version update PR is blocked deterministically.
-- [ ] **B2-T2.5 Evidence:** CI output and manifest record include explicit version-sync result.
+- [x] **B2-T2.1 Unit (success):** validator passes when version source and version tests are updated coherently.
+- [x] **B2-T2.2 Unit (edge):** validator fails when one of source/tests changes without counterpart update.
+- [x] **B2-T2.3 Integration:** CI check inspects diff and validates synchronized version updates.
+- [-] **B2-T2.4 E2E/CI:** unsynchronized version update PR is blocked deterministically.
+- [-] **B2-T2.5 Evidence:** CI output and manifest record include explicit version-sync result.
 
 #### R-VER-03 — CI/release governance gate
 
-- [ ] **B2-T3.1 Unit (success):** governance gate accepts fully compliant release candidate inputs.
-- [ ] **B2-T3.2 Unit (edge):** governance gate rejects inconsistent semver/version/test metadata combinations.
-- [ ] **B2-T3.3 Integration:** governance gate is wired into release validation workflow.
-- [ ] **B2-T3.4 E2E/CI:** release workflow demonstrates deterministic governance gate outcomes.
-- [ ] **B2-T3.5 Evidence:** gate result is included in SHA manifest and PR/release summary references.
+- [x] **B2-T3.1 Unit (success):** governance gate accepts fully compliant release candidate inputs.
+- [x] **B2-T3.2 Unit (edge):** governance gate rejects inconsistent semver/version/test metadata combinations.
+- [x] **B2-T3.3 Integration:** governance gate is wired into release validation workflow.
+- [-] **B2-T3.4 E2E/CI:** release workflow demonstrates deterministic governance gate outcomes.
+- [-] **B2-T3.5 Evidence:** gate result is included in SHA manifest and PR/release summary references.
 
 ### B2 Evidence Log (current)
 
-- Pending — no execution evidence captured yet.
+- Targeted unit/integration test suite (R-VER-01/02/03):
+  - `python3 -m unittest scripts/ci/check_version_governance_test.py scripts/ci/evidence_manifest_test.py scripts/ci/collect_workflow_run_evidence_test.py`
+  - Outcome: `Ran 11 tests ... OK`.
+- Batch 2 workflow/scripts delivered:
+  - Version governance validator: `scripts/ci/check_version_governance.py`.
+  - Unit/integration tests: `scripts/ci/check_version_governance_test.py`.
+  - Governance gate workflow: `.github/workflows/version-governance-gate.yml`.
+  - Aggregator required workflows extended with `version-governance-gate` in:
+    - `.github/workflows/ci-evidence-aggregator.yml`
+    - `scripts/ci/evidence_manifest.py`
+    - `scripts/ci/run_evidence_baseline.py`
 
 ### B2 Blockers (current)
 
-- None.
+- Pending live GitHub CI execution proof for `version-governance-gate` and downstream manifest/PR-reference propagation in hosted Actions.
 
 ---
 
