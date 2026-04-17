@@ -29,9 +29,9 @@ Implement v3 planning delta with strict v1-style batch discipline:
 
 | Batch | Priority | Requirement | Title | Status |
 |------:|:--------:|-------------|-------|:------:|
-| B0 | P0 | R-DEBT-V3-01 | Close DEF-V2-001 (`__pycache__` tracked artifacts) | [-] |
-| B0 | P0 | R-DEBT-V3-02 | Close DEF-V2-002 (manual CI evidence capture) | [-] |
-| B0 | P0 | R-DEBT-V3-03 | Close DEF-V2-003 (PR checklist-label coherence drift) | [-] |
+| B0 | P0 | R-DEBT-V3-01 | Close DEF-V2-001 (`__pycache__` tracked artifacts) | [x] |
+| B0 | P0 | R-DEBT-V3-02 | Close DEF-V2-002 (manual CI evidence capture) | [x] |
+| B0 | P0 | R-DEBT-V3-03 | Close DEF-V2-003 (PR checklist-label coherence drift) | [x] |
 | B1 | P0 | R-CI-01 | Per-workflow JSON evidence emission contract | [ ] |
 | B1 | P0 | R-CI-02 | `workflow_run` SHA aggregator for deterministic consolidation | [ ] |
 | B1 | P0 | R-CI-03 | Deterministic manifest reference + PR visibility | [ ] |
@@ -69,18 +69,18 @@ Implement v3 planning delta with strict v1-style batch discipline:
 
 ### B0 Exit Criteria
 
-- [-] DEF-V2-001 closure criteria satisfied and guarded against regression.
-- [-] DEF-V2-002 closure criteria satisfied with Option A baseline active.
-- [-] DEF-V2-003 closure criteria satisfied with enforced quality gate.
-- [-] v2 deferred register updated with closure evidence references.
+- [x] DEF-V2-001 closure criteria satisfied and guarded against regression.
+- [x] DEF-V2-002 closure criteria satisfied with Option A baseline active.
+- [x] DEF-V2-003 closure criteria satisfied with enforced quality gate.
+- [x] v2 deferred register updated with closure evidence references.
 
 ### B0 Requirement Traceability Matrix
 
 | Requirement | Unit | Integration | E2E/CI | Acceptance Evidence | Status |
 |-------------|------|-------------|--------|---------------------|--------|
-| R-DEBT-V3-01 (DEF-V2-001) | B0-T1.1, B0-T1.2 | B0-T1.3 | B0-T1.4 | B0-T1.5 | [-] |
-| R-DEBT-V3-02 (DEF-V2-002) | B0-T2.1, B0-T2.2 | B0-T2.3 | B0-T2.4 | B0-T2.5 | [-] |
-| R-DEBT-V3-03 (DEF-V2-003) | B0-T3.1, B0-T3.2 | B0-T3.3 | B0-T3.4 | B0-T3.5 | [-] |
+| R-DEBT-V3-01 (DEF-V2-001) | B0-T1.1, B0-T1.2 | B0-T1.3 | B0-T1.4 | B0-T1.5 | [x] |
+| R-DEBT-V3-02 (DEF-V2-002) | B0-T2.1, B0-T2.2 | B0-T2.3 | B0-T2.4 | B0-T2.5 | [x] |
+| R-DEBT-V3-03 (DEF-V2-003) | B0-T3.1, B0-T3.2 | B0-T3.3 | B0-T3.4 | B0-T3.5 | [x] |
 
 ### B0 Tasks (live checklist)
 
@@ -89,24 +89,24 @@ Implement v3 planning delta with strict v1-style batch discipline:
 - [x] **B0-T1.1 Unit (success):** repository hygiene rule detects Python cache artifacts deterministically.
 - [x] **B0-T1.2 Unit (edge):** hygiene rule fails when tracked `__pycache__` artifacts are reintroduced.
 - [x] **B0-T1.3 Integration:** CI hygiene check blocks PR when tracked cache artifacts exist.
-- [-] **B0-T1.4 E2E/CI:** representative run shows pass and fail behavior with actionable diagnostics. (local pass/fail complete; live GitHub Actions run evidence pending)
-- [-] **B0-T1.5 Evidence:** workflow/gate definition + deterministic evidence manifest reference + deferred closure note. (live run URL pending)
+- [x] **B0-T1.4 E2E/CI:** representative run shows pass and fail behavior with actionable diagnostics.
+- [x] **B0-T1.5 Evidence:** workflow/gate definition + deterministic evidence manifest reference + closure note.
 
 #### R-DEBT-V3-02 — close DEF-V2-002 (manual CI evidence capture)
 
 - [x] **B0-T2.1 Unit (success):** evidence producer emits valid per-run JSON payload.
 - [x] **B0-T2.2 Unit (edge):** malformed/missing evidence payload is rejected by aggregator validation.
 - [x] **B0-T2.3 Integration:** aggregator consolidates required workflow artifacts by SHA.
-- [-] **B0-T2.4 E2E/CI:** PR flow exposes deterministic manifest reference without manual URL copy. (baseline generated locally; live PR automation run pending)
-- [-] **B0-T2.5 Evidence:** `openspec/evidence/<sha>.json` reference + PR comment reference + closure update in deferred register. (live PR comment evidence pending)
+- [x] **B0-T2.4 E2E/CI:** PR flow exposes deterministic manifest reference without manual URL copy.
+- [x] **B0-T2.5 Evidence:** `openspec/evidence/<sha>.json` reference + PR comment reference + closure update in deferred register.
 
 #### R-DEBT-V3-03 — close DEF-V2-003 (PR checklist-label coherence)
 
 - [x] **B0-T3.1 Unit (success):** coherence parser validates compliant checklist/label mappings.
 - [x] **B0-T3.2 Unit (edge):** parser rejects incoherent checklist/label combinations and invalid issue-link semantics.
 - [x] **B0-T3.3 Integration:** CI quality gate blocks incoherent PR metadata.
-- [-] **B0-T3.4 E2E/CI:** representative PR validation run demonstrates deterministic pass/fail results. (script-level pass/fail covered; live PR-triggered run pending)
-- [-] **B0-T3.5 Evidence:** gate definition + test outputs + manifest reference + deferred closure update. (live run URL pending)
+- [x] **B0-T3.4 E2E/CI:** representative PR validation run demonstrates deterministic pass/fail results.
+- [x] **B0-T3.5 Evidence:** gate definition + test outputs + manifest reference + closure update.
 
 ### B0 Evidence Log (current)
 
@@ -127,9 +127,11 @@ Implement v3 planning delta with strict v1-style batch discipline:
   - `.github/workflows/repo-hygiene-gate.yml`
   - `.github/workflows/pr-metadata-coherence.yml`
   - Existing workflows now emit per-run evidence payloads using `scripts/ci/collect_workflow_evidence.py`.
-- Deferred for full closure confirmation:
-  - `openspec/changes/weave-v3-community-readiness/deferred.md#DEF-V3-B0-001`
-  - `openspec/changes/weave-v3-community-readiness/deferred.md#DEF-V3-B0-002`
+- Live CI evidence captured:
+  - `repo-hygiene-gate.yml` success: https://github.com/Jfgm299/weave-cli/actions/runs/24571204951
+  - `pr-metadata-coherence.yml` success: https://github.com/Jfgm299/weave-cli/actions/runs/24571408997
+  - `install-artifact-validation.yml` success: https://github.com/Jfgm299/weave-cli/actions/runs/24571204913
+  - `migration-note-gate.yml` success: https://github.com/Jfgm299/weave-cli/actions/runs/24571409009
 
 ### B0 Blockers (current)
 

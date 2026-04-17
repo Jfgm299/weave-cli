@@ -3,6 +3,7 @@ name: pr-metadata-coherence
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
 
 jobs:
   enforce-pr-metadata-coherence:
