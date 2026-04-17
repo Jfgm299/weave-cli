@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -66,10 +67,21 @@ def build_manifest(head_sha: str, payloads: list[dict]) -> dict:
                 )
             workflows.append(payload)
 
-    return {
+    manifest_core = {
         "schema_version": SCHEMA_VERSION,
         "head_sha": head_sha,
         "workflows": workflows,
+    }
+
+    canonical = json.dumps(manifest_core, sort_keys=True, separators=(",", ":"))
+    manifest_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    return {
+        **manifest_core,
+        "snapshot": {
+            "workflow_count": len(workflows),
+            "manifest_digest_sha256": manifest_digest,
+        },
     }
 
 

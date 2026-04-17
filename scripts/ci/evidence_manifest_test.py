@@ -109,6 +109,90 @@ class EvidenceManifestTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("missing required keys", result.stderr)
 
+    def test_manifest_includes_deterministic_snapshot_digest(self) -> None:
+        sha = "d" * 40
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "inputs"
+            inputs.mkdir(parents=True)
+
+            write_payload(
+                inputs / "install-artifact-validation.json",
+                "install-artifact-validation",
+                sha,
+            )
+            write_payload(
+                inputs / "migration-note-gate.json", "migration-note-gate", sha
+            )
+            write_payload(inputs / "release-artifacts.json", "release-artifacts", sha)
+            write_payload(
+                inputs / "pr-metadata-coherence.json", "pr-metadata-coherence", sha
+            )
+            write_payload(inputs / "repo-hygiene-gate.json", "repo-hygiene-gate", sha)
+
+            manifest_a = root / "manifest-a.json"
+            manifest_b = root / "manifest-b.json"
+
+            base_cmd = [
+                sys.executable,
+                str(SCRIPT_PATH),
+                "--head-sha",
+                sha,
+                "--input-dir",
+                str(inputs),
+            ]
+
+            first = subprocess.run(
+                [*base_cmd, "--manifest-output", str(manifest_a)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            second = subprocess.run(
+                [*base_cmd, "--manifest-output", str(manifest_b)],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(first.returncode, 0, msg=first.stderr)
+            self.assertEqual(second.returncode, 0, msg=second.stderr)
+
+            data_a = json.loads(manifest_a.read_text(encoding="utf-8"))
+            data_b = json.loads(manifest_b.read_text(encoding="utf-8"))
+
+            self.assertEqual(
+                data_a["snapshot"]["manifest_digest_sha256"],
+                data_b["snapshot"]["manifest_digest_sha256"],
+            )
+            self.assertEqual(data_a["snapshot"]["workflow_count"], 5)
+
+    def test_rejects_invalid_sha(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            inputs = root / "inputs"
+            inputs.mkdir(parents=True)
+            manifest_output = root / "manifest.json"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT_PATH),
+                    "--head-sha",
+                    "not-a-valid-sha",
+                    "--input-dir",
+                    str(inputs),
+                    "--manifest-output",
+                    str(manifest_output),
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("invalid sha", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

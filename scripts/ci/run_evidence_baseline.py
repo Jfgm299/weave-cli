@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 COLLECT = ROOT / "scripts" / "ci" / "collect_workflow_evidence.py"
 MANIFEST = ROOT / "scripts" / "ci" / "evidence_manifest.py"
+OPEN_SPEC_REFS = ROOT / "scripts" / "ci" / "generate_openspec_evidence_refs.py"
 WORKFLOWS = [
     "install-artifact-validation",
     "migration-note-gate",
@@ -52,6 +53,7 @@ def main() -> int:
 
     manifest_output = ROOT / "openspec" / "evidence" / f"{sha}.json"
     comment_output = ROOT / "openspec" / "evidence" / f"pr-comment-{sha}.md"
+    refs_output = ROOT / "openspec" / "evidence" / f"refs-{sha}.md"
 
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir)
@@ -96,8 +98,23 @@ def main() -> int:
             env,
         )
 
+        run(
+            [
+                sys.executable,
+                str(OPEN_SPEC_REFS),
+                "--head-sha",
+                sha,
+                "--manifest-file",
+                str(manifest_output),
+                "--output",
+                str(refs_output),
+            ],
+            env,
+        )
+
     print(f"Baseline manifest generated: {manifest_output}")
     print(f"PR comment reference generated: {comment_output}")
+    print(f"OpenSpec machine references generated: {refs_output}")
     return 0
 
 
