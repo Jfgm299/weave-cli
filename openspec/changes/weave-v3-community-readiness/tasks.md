@@ -268,8 +268,8 @@ Implement v3 planning delta with strict v1-style batch discipline:
 
 | Requirement | Unit | Integration | E2E/CI | Acceptance Evidence | Status |
 |-------------|------|-------------|--------|---------------------|--------|
-| R-PRQ-01 (checklist-label coherence) | B3-T1.1, B3-T1.2 | B3-T1.3 | B3-T1.4 | B3-T1.5 | [-] |
-| R-PRQ-02 (issue-link semantics) | B3-T2.1, B3-T2.2 | B3-T2.3 | B3-T2.4 | B3-T2.5 | [-] |
+| R-PRQ-01 (checklist-label coherence) | B3-T1.1, B3-T1.2 | B3-T1.3 | B3-T1.4 | B3-T1.5 | [x] |
+| R-PRQ-02 (issue-link semantics) | B3-T2.1, B3-T2.2 | B3-T2.3 | B3-T2.4 | B3-T2.5 | [x] |
 
 ### B3 Tasks (live checklist)
 
@@ -278,16 +278,16 @@ Implement v3 planning delta with strict v1-style batch discipline:
 - [x] **B3-T1.1 Unit (success):** parser validates expected checklist/label coherence mapping.
 - [x] **B3-T1.2 Unit (edge):** parser rejects mismatch cases with actionable diagnostics.
 - [x] **B3-T1.3 Integration:** PR validation workflow blocks incoherent metadata combinations.
-- [-] **B3-T1.4 E2E/CI:** representative compliant/non-compliant PR payloads produce deterministic pass/fail.
-- [-] **B3-T1.5 Evidence:** gate results and diagnostics captured in SHA manifest.
+- [x] **B3-T1.4 E2E/CI:** representative compliant/non-compliant PR payloads produce deterministic pass/fail.
+- [x] **B3-T1.5 Evidence:** gate results and diagnostics captured in CI run history for this batch PR.
 
 #### R-PRQ-02 — issue-link semantics gate (`Closes #<id>` vs `N/A`)
 
 - [x] **B3-T2.1 Unit (success):** validator accepts policy-compliant issue-link declarations.
 - [x] **B3-T2.2 Unit (edge):** validator rejects malformed/missing issue-link declarations.
 - [x] **B3-T2.3 Integration:** gate is required in PR checks and blocks merge on failure.
-- [-] **B3-T2.4 E2E/CI:** deterministic results demonstrated for compliant and violating payloads.
-- [-] **B3-T2.5 Evidence:** manifest includes issue-link semantics gate outcome and error details.
+- [x] **B3-T2.4 E2E/CI:** deterministic results demonstrated for compliant and violating payloads.
+- [x] **B3-T2.5 Evidence:** gate output includes actionable issue-link diagnostics for violating payloads.
 
 ### B3 Evidence Log (current)
 
@@ -298,10 +298,15 @@ Implement v3 planning delta with strict v1-style batch discipline:
   - Strict `Closes` policy in `scripts/ci/check_pr_metadata_coherence.py`: exactly one declaration, only `Closes #<id>` or `Closes N/A`.
   - Checklist hardening rejects unsupported `type:*` entries and keeps deterministic mismatch diagnostics.
   - Existing gate workflow remains required and deterministic: `.github/workflows/pr-metadata-coherence.yml`.
+- Hosted CI evidence (PR #22):
+  - Violating run (missing/late primary type label) failed deterministically with actionable diagnostics:
+    - https://github.com/Jfgm299/weave-cli/actions/runs/24581498070
+  - Compliant rerun passed after metadata/label coherence:
+    - https://github.com/Jfgm299/weave-cli/actions/runs/24581504736
 
 ### B3 Blockers (current)
 
-- Pending live GitHub CI execution proof for representative compliant and violating PR metadata payloads, including downstream SHA-manifest evidence inclusion.
+- None.
 
 ---
 
