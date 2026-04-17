@@ -8,7 +8,9 @@ from pathlib import Path
 
 PR_TYPE_RE = re.compile(r"- \[([ xX])\] `type:([a-z0-9-]+)`")
 ISSUE_LINE_RE = re.compile(r"^\s*Closes\s+(.+)\s*$", re.IGNORECASE | re.MULTILINE)
-ISSUE_REF_RE = re.compile(r"#\d+")
+ISSUE_REF_EXACT_RE = re.compile(r"#\d+")
+ALLOWED_PRIMARY_TYPES = {"bug", "feature", "docs", "refactor", "chore"}
+BREAKING_TYPE = "breaking-change"
 
 
 def parse_selected_types(body: str) -> list[str]:
@@ -19,11 +21,8 @@ def parse_selected_types(body: str) -> list[str]:
     return selected
 
 
-def extract_issue_line(body: str) -> str | None:
-    match = ISSUE_LINE_RE.search(body)
-    if not match:
-        return None
-    return match.group(1).strip()
+def extract_issue_lines(body: str) -> list[str]:
+    return [match.strip() for match in ISSUE_LINE_RE.findall(body)]
 
 
 def normalize_labels(event: dict) -> set[str]:
@@ -40,14 +39,29 @@ def validate(event: dict) -> list[str]:
     errors: list[str] = []
 
     selected_types = parse_selected_types(body)
-    primary_types = [value for value in selected_types if value != "breaking-change"]
-    selected_breaking = "breaking-change" in selected_types
+    unknown_checklist_types = sorted(
+        {
+            value
+            for value in selected_types
+            if value not in (ALLOWED_PRIMARY_TYPES | {BREAKING_TYPE})
+        }
+    )
+    if unknown_checklist_types:
+        errors.append(
+            "PR Type checklist includes unsupported type entries: "
+            + ", ".join(f"type:{value}" for value in unknown_checklist_types)
+        )
+
+    primary_types = [
+        value for value in selected_types if value in ALLOWED_PRIMARY_TYPES
+    ]
+    selected_breaking = BREAKING_TYPE in selected_types
 
     primary_labels = sorted(
         [
             label
             for label in labels
-            if label.startswith("type:") and label != "type:breaking-change"
+            if label.startswith("type:") and label != f"type:{BREAKING_TYPE}"
         ]
     )
 
@@ -67,25 +81,27 @@ def validate(event: dict) -> list[str]:
                 f"Primary checklist type '{expected}' does not match label '{primary_labels[0]}'"
             )
 
-    has_breaking_label = "type:breaking-change" in labels
+    has_breaking_label = f"type:{BREAKING_TYPE}" in labels
     if selected_breaking != has_breaking_label:
         errors.append(
             "type:breaking-change checklist selection must match presence of 'type:breaking-change' label"
         )
 
-    issue_line = extract_issue_line(body)
-    if issue_line is None:
+    issue_lines = extract_issue_lines(body)
+    if len(issue_lines) == 0:
         errors.append(
             "PR body must include a 'Closes ...' line in Linked Issue section"
         )
+    elif len(issue_lines) > 1:
+        errors.append(
+            "PR body must include exactly one 'Closes ...' declaration in Linked Issue section"
+        )
     else:
-        normalized = issue_line.strip()
+        normalized = issue_lines[0].strip()
         if normalized.upper() == "N/A":
             pass
-        elif not ISSUE_REF_RE.search(normalized):
-            errors.append(
-                "Linked Issue must be 'N/A' or include at least one issue reference like #123"
-            )
+        elif not ISSUE_REF_EXACT_RE.fullmatch(normalized):
+            errors.append("Linked Issue must be exactly 'Closes #<id>' or 'Closes N/A'")
 
     return errors
 
