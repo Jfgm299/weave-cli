@@ -1,19 +1,25 @@
-name: migration-note-gate
+name: repo-hygiene-gate
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - 'scripts/**'
+      - '.github/workflows/repo-hygiene-gate.yml'
+      - '.gitignore'
+  push:
+    branches:
+      - main
 
 jobs:
-  enforce-migration-note:
+  enforce-repo-hygiene:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Enforce migration section for breaking changes
+      - name: Validate tracked python cache artifacts are absent
         run: |
-          python3 scripts/release/check_migration_gate.py
+          python3 scripts/ci/check_repo_hygiene.py
 
       - name: Emit workflow evidence payload
         if: ${{ always() }}
@@ -21,13 +27,13 @@ jobs:
           EVIDENCE_STATUS: ${{ job.status }}
         run: |
           python3 scripts/ci/collect_workflow_evidence.py \
-            --workflow-name migration-note-gate \
+            --workflow-name repo-hygiene-gate \
             --status "$EVIDENCE_STATUS" \
-            --output ci-evidence/migration-note-gate.json
+            --output ci-evidence/repo-hygiene-gate.json
 
       - name: Upload workflow evidence artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ci-evidence-migration-note-gate
-          path: ci-evidence/migration-note-gate.json
+          name: ci-evidence-repo-hygiene-gate
+          path: ci-evidence/repo-hygiene-gate.json

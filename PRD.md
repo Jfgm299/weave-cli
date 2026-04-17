@@ -2,9 +2,9 @@
 
 > **Weave agents and skills into any project with reproducible symlink-based setup.**
 
-**Version**: 0.1.0-draft  
+**Version**: 0.2.0-draft  
 **Author**: JF (with AI facilitation)  
-**Date**: 2026-04-15  
+**Date**: 2026-04-17  
 **Status**: Draft
 
 ---
@@ -124,6 +124,25 @@ The first release is CLI-first and project-scoped. It should not force unnecessa
 - R-DEP-05: CLI MUST not require TUI dependencies in v1.
 - R-DEP-06: v1 distribution MUST support one-command installation of the Weave binary (core CLI ready to run).
 - R-DEP-07: Core CLI commands MUST be shell-agnostic (work from any shell that can invoke an executable in `PATH`, e.g. bash/zsh/fish).
+
+### 5.0.5 CI Evidence Automation (v3 Option A)
+
+To eliminate manual evidence bookkeeping and increase auditability, v3 adopts CI evidence automation Option A.
+
+Pipeline contract:
+
+1. Each required workflow emits a per-run JSON evidence artifact.
+2. A `workflow_run` aggregator consolidates evidence by `head_sha`.
+3. Aggregator produces deterministic manifest reference (for example `openspec/evidence/<sha>.json`).
+4. PR context receives the same deterministic reference (for example automated comment).
+5. OpenSpec task evidence should reference the manifest, not manually copied workflow URLs.
+
+Requirements:
+
+- R-CI-01: Each required CI workflow MUST emit a per-run JSON evidence artifact with deterministic schema fields.
+- R-CI-02: A `workflow_run` aggregator MUST consolidate workflow evidence by head SHA and produce one deterministic manifest per SHA.
+- R-CI-03: The consolidated manifest MUST be referenceable as `openspec/evidence/<sha>.json` and surfaced in PR context.
+- R-CI-04: OpenSpec evidence tracking MUST default to machine-generated manifest references and MUST NOT require manual URL copy.
 
 ---
 
@@ -266,6 +285,45 @@ sync:
 - R-CONFIG-06: `skill add` and `command add` MUST update `weave.yaml` atomically after successful filesystem operations.
 - R-CONFIG-07: v1 persistence policy MUST be `strict`: if symlink creation fails, `weave.yaml` MUST NOT be updated.
 - R-CONFIG-08: Provider-aware command installs MUST persist state transactionally across all targeted providers.
+
+### 6.6 Catalog Internet (v3 planning scope)
+
+v3 planning adds an internet-backed catalog scope with deterministic consistency guarantees.
+
+Initial source providers:
+
+- `github_curated_index` (remote curated indexes pinned by ref/hash)
+- `registry_json` (JSON registry endpoint/file with pinned revision/hash)
+
+Core consistency contract:
+
+- **User requirement (explicit):** listings MUST be consistent from all initial sources.
+- Consistency is enforced through deterministic normalization, identity/dedup, and snapshot-bound search semantics.
+
+**Requirements:**
+
+- R-CAT-01: For the same query and same synced snapshot state, catalog listing output MUST be consistent across all initial sources after normalization/dedup.
+- R-CAT-02: Catalog ingestion MUST support a multi-source provider model with `github_curated_index` and `registry_json` as the initial providers.
+- R-CAT-03: Catalog entries MUST be transformed into a deterministic normalization schema with required canonical fields (`entity_type`, `canonical_name`, `provider_source`, `provider_ref`, `version_ref`, `description`, `tags`, `updated_at`).
+- R-CAT-04: Catalog identity and dedup MUST use stable identity keys and deterministic merge rules so equivalent skills/commands from different sources resolve to one consistent listing row.
+- R-CAT-05: Catalog query sorting/ranking MUST be deterministic; same query + same snapshot hash MUST yield identical ordered results.
+- R-CAT-06: Each entry MUST expose freshness/staleness metadata and follow a deterministic conflict-resolution policy when sources disagree.
+- R-CAT-07: Sync MUST produce a catalog snapshot with explicit version and hash; search/read paths MUST be snapshot-bound for repeatability.
+- R-CAT-08: Search MUST work offline against the latest successfully synced snapshot with explicit snapshot metadata in output.
+- R-CAT-09: Internet providers MUST be gated by trust policy (source allowlist + pin by ref/hash) before ingestion.
+- R-CAT-10: Malformed/partial source data MUST be quarantined or skipped with diagnostics, and MUST NOT corrupt a committed snapshot.
+
+### 6.6.1 Deterministic conflict-resolution policy (v3)
+
+When normalized entries with the same stable identity disagree, resolution order MUST be deterministic:
+
+1. Reject non-allowlisted or unpinned source payloads.
+2. Prefer entries that pass schema validation over partial/malformed variants.
+3. Prefer latest trusted `updated_at` within staleness window.
+4. Tie-break by provider precedence configured in catalog policy.
+5. Final tie-break by lexical ordering of `provider_source` + `provider_ref`.
+
+If no trustworthy winner exists, entry state becomes `quarantined` and diagnostics MUST be emitted.
 
 ---
 
@@ -445,6 +503,29 @@ type ProviderAdapter interface {
 - R-DIST-02: Installation instructions MUST include quickstart and minimal troubleshooting.
 - R-DIST-03: Binary naming and versioning MUST follow semver.
 
+### 9.1 Release Versioning Governance (v3 delta)
+
+The `weave` binary version is a governed release contract.
+
+Semver bump rules:
+
+- **PATCH**: backward-compatible fixes/chore/docs with no feature expansion or breaking behavior.
+- **MINOR**: backward-compatible feature addition or meaningful capability extension.
+- **MAJOR**: breaking behavior, breaking CLI contract, or incompatible schema/change requiring migration.
+
+Mandatory version bump process (release-intended changes):
+
+1. Decide bump type and document rationale in release/PR metadata.
+2. Update `internal/cli/version.go` to target version.
+3. Update/add version tests that assert expected version output/contract.
+4. Ensure CI governance checks pass before release.
+
+Requirements:
+
+- R-VER-01: Release policy MUST define semver bump rules with explicit decision criteria for patch/minor/major.
+- R-VER-02: Any version bump MUST update `internal/cli/version.go` and version tests in the same change set.
+- R-VER-03: CI/release validation MUST fail when semver/version governance rules are violated.
+
 ---
 
 ## 10. Update & Maintenance
@@ -570,6 +651,20 @@ To avoid mixed definitions of completion:
 - A requirement can be marked **done** only when it is fully implemented and operationally validated according to this verification strategy.
 - Docs/policy baseline acceptance is allowed in v1 for scoped cuts, but it MUST be tracked as deferred executable work and MUST NOT be represented as fully done.
 - If execution layers are intentionally postponed (for example, release automation or CI enforcement), they MUST be logged in OpenSpec deferred tracking with owner, closure criteria, and target milestone.
+
+### 13.7 PR Quality Gate Coherence (v3 delta)
+
+To reduce review drift and merge inconsistencies, PR validation includes coherence gates.
+
+Requirements:
+
+- R-PRQ-01: PR validation MUST enforce checklist-label coherence according to repository policy before merge eligibility.
+- R-PRQ-02: PR validation MUST enforce linked-issue semantics (`Closes #<id>` or explicit `N/A`) according to repository policy.
+
+Acceptance expectation:
+
+- Non-coherent PR metadata fails deterministically with actionable diagnostics.
+- Coherent PR metadata passes consistently across reruns.
 
 ---
 

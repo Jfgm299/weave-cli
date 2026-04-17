@@ -1,19 +1,22 @@
-name: migration-note-gate
+name: version-governance-gate
 
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
 
 jobs:
-  enforce-migration-note:
+  validate-version-governance:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Enforce migration section for breaking changes
+      - name: Validate semver policy and version sync
         run: |
-          python3 scripts/release/check_migration_gate.py
+          python3 scripts/ci/check_version_governance.py --event-file "$GITHUB_EVENT_PATH"
 
       - name: Emit workflow evidence payload
         if: ${{ always() }}
@@ -21,13 +24,13 @@ jobs:
           EVIDENCE_STATUS: ${{ job.status }}
         run: |
           python3 scripts/ci/collect_workflow_evidence.py \
-            --workflow-name migration-note-gate \
+            --workflow-name version-governance-gate \
             --status "$EVIDENCE_STATUS" \
-            --output ci-evidence/migration-note-gate.json
+            --output ci-evidence/version-governance-gate.json
 
       - name: Upload workflow evidence artifact
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ci-evidence-migration-note-gate
-          path: ci-evidence/migration-note-gate.json
+          name: ci-evidence-version-governance-gate
+          path: ci-evidence/version-governance-gate.json

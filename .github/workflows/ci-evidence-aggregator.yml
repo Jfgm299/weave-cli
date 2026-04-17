@@ -1,0 +1,111 @@
+name: ci-evidence-aggregator
+
+on:
+  workflow_run:
+    workflows:
+      - install-artifact-validation
+      - migration-note-gate
+      - release-artifacts
+      - pr-metadata-coherence
+      - repo-hygiene-gate
+      - version-governance-gate
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      head_sha:
+        description: "Head SHA to aggregate"
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  aggregate-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve head SHA
+        id: sha
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_HEAD_SHA: ${{ github.event.inputs.head_sha }}
+          EVENT_WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            SHA="$INPUT_HEAD_SHA"
+          else
+            SHA="$EVENT_WORKFLOW_SHA"
+          fi
+
+          if [ -z "$SHA" ]; then
+            echo "Unable to resolve SHA for evidence aggregation" >&2
+            exit 1
+          fi
+
+          echo "head_sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Collect workflow evidence artifacts by SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ steps.sha.outputs.head_sha }}
+        run: |
+          python3 scripts/ci/collect_workflow_run_evidence.py \
+            --repo "$REPOSITORY" \
+            --head-sha "$HEAD_SHA" \
+            --token "$GH_TOKEN" \
+            --output-dir ci-evidence/collected
+
+      - name: Build deterministic manifest and PR summary
+        env:
+          HEAD_SHA: ${{ steps.sha.outputs.head_sha }}
+        run: |
+          python3 scripts/ci/evidence_manifest.py \
+            --head-sha "$HEAD_SHA" \
+            --input-dir ci-evidence/collected \
+            --manifest-output "openspec/evidence/$HEAD_SHA.json" \
+            --pr-comment-output "ci-evidence/pr-comment-$HEAD_SHA.md"
+
+      - name: Generate OpenSpec machine evidence references
+        env:
+          HEAD_SHA: ${{ steps.sha.outputs.head_sha }}
+        run: |
+          python3 scripts/ci/generate_openspec_evidence_refs.py \
+            --head-sha "$HEAD_SHA" \
+            --manifest-file "openspec/evidence/$HEAD_SHA.json" \
+            --output "openspec/evidence/refs-$HEAD_SHA.md"
+
+      - name: Upload deterministic manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-evidence-manifest-${{ steps.sha.outputs.head_sha }}
+          path: |
+            openspec/evidence/${{ steps.sha.outputs.head_sha }}.json
+            openspec/evidence/refs-${{ steps.sha.outputs.head_sha }}.md
+            ci-evidence/pr-comment-${{ steps.sha.outputs.head_sha }}.md
+
+      - name: Upsert PR evidence manifest comment
+        if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          HEAD_SHA: ${{ steps.sha.outputs.head_sha }}
+        run: |
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No PR number attached to workflow_run event; skipping PR comment"
+            exit 0
+          fi
+
+          python3 scripts/ci/post_manifest_pr_comment.py \
+            --repo "$REPOSITORY" \
+            --pr-number "$PR_NUMBER" \
+            --token "$GH_TOKEN" \
+            --manifest-path "openspec/evidence/$HEAD_SHA.json" \
+            --head-sha "$HEAD_SHA" \
+            --summary-file "ci-evidence/pr-comment-$HEAD_SHA.md"

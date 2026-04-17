@@ -41,3 +41,20 @@ jobs:
           TAR_FILE="dist/weave_ci_linux_amd64.tar.gz"
           tar -xzf "$TAR_FILE" -C "$HOME/.local/bin"
           "$HOME/.local/bin/weave" --version
+
+      - name: Emit workflow evidence payload
+        if: ${{ always() }}
+        env:
+          EVIDENCE_STATUS: ${{ job.status }}
+        run: |
+          python3 scripts/ci/collect_workflow_evidence.py \
+            --workflow-name install-artifact-validation \
+            --status "$EVIDENCE_STATUS" \
+            --output ci-evidence/install-artifact-validation.json
+
+      - name: Upload workflow evidence artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-evidence-install-artifact-validation
+          path: ci-evidence/install-artifact-validation.json

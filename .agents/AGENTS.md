@@ -120,7 +120,7 @@ When working on this project, load the relevant skill(s) BEFORE writing any code
 
 | Skill | Trigger | Path |
 |-------|---------|------|
-| _(no skills yet)_ | — | — |
+| `version-batch-planner` | New version planning, batch definition, PRD-to-OpenSpec traceability, deferred/debt discipline | `.agents/skills/version-batch-planner/SKILL.md` |
 
 ---
 
